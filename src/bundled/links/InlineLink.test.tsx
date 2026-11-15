@@ -57,6 +57,12 @@ it.each([
     "Thread",
     "message-2",
   ],
+  [
+    "buzz://plugin-install?repository=example%2Fplugin",
+    "install",
+    "Install plugin",
+    "plug",
+  ],
 ])(
   "renders semantic Buzz labels and icons for %s",
   (href, kind, label, icon) => {

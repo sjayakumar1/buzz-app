@@ -2,6 +2,7 @@
 // change that starts or deletes plugin code is a request the person using
 // Buzz confirms on a card in the agent's conversation, or in Settings, since
 // plugins are not sandboxed.
+import { pluginInstallLink } from "../features/navigation/buzz-links";
 import { gitScope } from "./git-scope";
 import { samePluginRelease } from "./same-release";
 import type {
@@ -70,6 +71,9 @@ const BUZZ_HOSTED = /^\/git\/[0-9a-f]{64}\/[^/]+\/?$/i;
 /** Native code trims Unicode whitespace, U+0085 among it, which `new URL`
  * does not. A string this side cannot read as Buzz-hosted could be one there. */
 const UNTRIMMED = /[\s\p{Cc}]/u;
+/** A GitHub page for a folder: `/owner/repo/tree/<ref>[/<folder>]`. */
+const GITHUB_TREE =
+  /^https:\/\/github\.com\/([^/]+\/[^/]+)\/tree\/([^/]+)(?:\/(.+?))?\/?$/;
 const buzzHosted = (repository: string) => {
   try {
     return BUZZ_HOSTED.test(new URL(repository).pathname);
@@ -179,6 +183,25 @@ export function createPluginRequests({
       throw new Error(`The repository is at ${commit}, not ${wanted}`);
     return { preview, commit };
   }
+  /** The plugin at `path`, or the repository's only one. */
+  function choose(
+    preview: Awaited<ReturnType<typeof check>>,
+    path: string | undefined,
+  ) {
+    const paths = preview.candidates.map((item) => item.path).join(", ");
+    const candidate = path
+      ? preview.candidates.find((item) => item.path === path)
+      : preview.candidates.length === 1
+        ? preview.candidates[0]
+        : undefined;
+    if (!candidate)
+      throw new Error(
+        path
+          ? `No built plugin at ${path}. Found: ${paths}`
+          : `Choose a path: ${paths}`,
+      );
+    return candidate;
+  }
   async function install(input: PluginRequestInput) {
     if (!input.repository) throw new Error("repository is required to install");
     const reference = input.reference ?? "";
@@ -188,18 +211,7 @@ export function createPluginRequests({
       input.commit,
       input.path,
     );
-    const paths = preview.candidates.map((item) => item.path).join(", ");
-    const candidate = input.path
-      ? preview.candidates.find((item) => item.path === input.path)
-      : preview.candidates.length === 1
-        ? preview.candidates[0]
-        : undefined;
-    if (!candidate)
-      throw new Error(
-        input.path
-          ? `No built plugin at ${input.path}. Found: ${paths}`
-          : `Choose a path: ${paths}`,
-      );
+    const candidate = choose(preview, input.path);
     const { id, name } = candidate.manifest;
     if (input.id && input.id !== id)
       throw new Error(
@@ -326,6 +338,47 @@ export function createPluginRequests({
             ...(manifest.host && { host: manifest.host }),
             alreadyInstalled: installed.has(manifest.id),
           })),
+        };
+      },
+      /** An install link to share. `check` refuses a Buzz-hosted repository,
+       * which opens only for people in that community who can read it. */
+      async link(
+        input: Readonly<{
+          repository: string;
+          reference?: string | undefined;
+          path?: string | undefined;
+          pin?: boolean | undefined;
+        }>,
+      ) {
+        const tree =
+          input.reference === undefined && input.path === undefined
+            ? GITHUB_TREE.exec(input.repository)
+            : null;
+        const repository = tree
+          ? `https://github.com/${tree[1]}`
+          : input.repository;
+        const reference = tree?.[2] ?? input.reference ?? "";
+        const path = tree?.[3] ?? input.path;
+        const { preview, commit } = await pinned(
+          repository,
+          reference,
+          undefined,
+          path,
+        );
+        const candidate = choose(preview, path);
+        const { id, name } = candidate.manifest;
+        const link = pluginInstallLink({
+          repository,
+          reference,
+          path: candidate.path,
+          ...(input.pin && { commit }),
+        });
+        return {
+          link,
+          markdown: `[Install ${name}](${link})`,
+          id,
+          name,
+          commit,
         };
       },
       async request(input: PluginRequestInput) {

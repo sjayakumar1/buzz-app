@@ -19,6 +19,7 @@ import {
   ThreadIcon,
   HashIcon,
   LockIcon,
+  PlugIcon,
 } from "../../shared/design-system/icons/index";
 import {
   useContext,
@@ -151,6 +152,7 @@ const icons = {
   presentation: PresentationIcon,
   buzz: ChatCircleIcon,
   chat: ChatCircleIcon,
+  install: PlugIcon,
   channel: HashIcon,
   message: ThreadIcon,
   thread: ThreadIcon,
@@ -196,6 +198,7 @@ export function LinkLabel({
     else if (kind === "chat") label = "Chat";
     else if (kind === "message") label = "Message";
     else if (kind === "thread") label = "Thread";
+    else if (kind === "install") label = "Install plugin";
     else if (kind === "buzz") label = "Buzz";
   }
   // The channel icon already supplies the visual hash.
