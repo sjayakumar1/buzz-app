@@ -204,6 +204,8 @@ function ChannelGeneralAccessEditor({
     choice.joinRole === "guest";
   const access = base ? generalAccessValue(base) : "";
   const closed = access === "private" && openingBlocked;
+  // The opening check can settle after the confirmation opened.
+  const choiceOpensClosed = closed && choice?.visibility === "public";
   const Icon =
     access === "public"
       ? GlobeIcon
@@ -250,7 +252,11 @@ function ChannelGeneralAccessEditor({
       busy.current ||
       (check
         ? attempt?.status !== "unconfirmed"
-        : !base || !choice || locked || !policyAllowsChoice)
+        : !base ||
+          !choice ||
+          locked ||
+          !policyAllowsChoice ||
+          choiceOpensClosed)
     )
       return;
     if (check) section.current?.focus();
@@ -389,6 +395,7 @@ function ChannelGeneralAccessEditor({
           <AlertDialog
             title="Change general access?"
             description={[
+              choiceOpensClosed ? OPENING_BLOCKED_REASON : "",
               solo && choice.visibility === "public"
                 ? SOLO_ACCESS_DISCLOSURE
                 : choice.visibility !== base.visibility
@@ -434,7 +441,7 @@ function ChannelGeneralAccessEditor({
                 </Button>
                 <Button
                   variant="prominent"
-                  disabled={locked || !policyAllowsChoice}
+                  disabled={locked || !policyAllowsChoice || choiceOpensClosed}
                   onClick={() => void apply()}
                 >
                   Change access
