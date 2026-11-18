@@ -28,6 +28,7 @@ import {
   rowIdentity,
   rowProfileIds,
 } from "./InboxRow";
+import { useActivityMutes } from "./useActivityMutes";
 import {
   useChannelList,
   useProfileGeneration,
@@ -299,6 +300,7 @@ function InboxList({
 }) {
   const previewId = useId();
   const list = useChannelList(session.channels);
+  const muted = useActivityMutes(session);
   const inbox = useSyncExternalStore(
     session.unread.subscribeInbox,
     session.unread.inbox,
@@ -480,6 +482,7 @@ function InboxList({
   }, [session, list.status, list.asOf, refreshAfterRoster]);
   const items = inbox.items;
   const activityItems = items
+    .filter((item) => !muted.has(item.channelId))
     .map((item) => (activity === "mentions" ? item.mention : item))
     .filter(
       (item): item is InboxItem =>
@@ -564,9 +567,12 @@ function InboxList({
   // Enrich bounded activity candidates before applying Sender: unknown authors
   // must be able to appear after their profiles arrive, even in an empty view.
   // Keep main's bounded optional profile demand, independent of presentation.
+  const activityReactions = reactionFeed.items.filter(
+    (item) => !muted.has(item.channelId),
+  );
   const candidateIds = [
     ...activityItems.slice(0, 50).map((item) => item.authorId),
-    ...reactionFeed.items
+    ...activityReactions
       .slice(0, 50)
       .flatMap((item) => item.events.map((event) => event.pubkey)),
   ];
@@ -618,7 +624,7 @@ function InboxList({
   const reactionItems =
     !unreadOnly && (activity === "all" || activity === "reactions")
       ? reactionRows(
-          reactionFeed.items,
+          activityReactions,
           (authorId) =>
             senderFilter === "everyone" ||
             senderKind(authorId) ===
