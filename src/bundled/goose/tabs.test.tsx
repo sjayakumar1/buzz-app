@@ -929,6 +929,7 @@ function activity(
       const [channelId = key, root] = key.split("/");
       return { channelId, ...(root ? { root } : {}) };
     },
+    folders: () => new Map<string, string>(),
     channelLabel: (_: string, id: string) =>
       world.names?.[id] ? { name: world.names[id], kind: "stream" } : undefined,
     prompts: () => ({

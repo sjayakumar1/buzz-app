@@ -118,6 +118,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
     id: TYPE_ID,
     retire: (pubkey) => runtime.retire(pubkey),
     protection: true,
+    conversationFolders: true,
     conversationSections: true,
     title: "Goose",
     icon: GooseLogoIcon,
@@ -172,6 +173,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
       return [provider, model].filter(Boolean).join(" · ") || "Goose";
     },
     sessions: {
+      ready: (agentKey) => runtime.listed(agentKey),
       list: (agentKey) => {
         const live = runtime.sessions(agentKey);
         const busy = new Map(live.map((view) => [view.key, view.busy]));
@@ -210,6 +212,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
           config(agent.config).workspace,
           since,
           signal,
+          [...new Set(runtime.folders(agent.key).values())],
         ),
     }),
     tabs: [
