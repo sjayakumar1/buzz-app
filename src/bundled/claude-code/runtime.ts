@@ -44,7 +44,10 @@ import {
   mentionAuthority,
   workflowOf,
 } from "../../features/agents/owner-attestation";
-import type { TranscriptTurn } from "../../features/agents/activity-transcript";
+import {
+  promptSections,
+  type TranscriptTurn,
+} from "../../features/agents/activity-transcript";
 import { type AgentReads, workflowMarked } from "../../features/agents/reads";
 import { localStore, type AgentStore } from "../../features/agents/store";
 import {
@@ -190,6 +193,7 @@ type Entry = {
   directories: Map<string, readonly string[]>;
   /** The folders each conversation's owner messages referenced. */
   referenced: Map<string, readonly string[]>;
+  /** Session id → a hash of the base prompt its process was last given. */
   /** Each conversation's latest posting policy: when its turns were handed
    * over, and when all of them settled. */
   policies: Map<
@@ -229,6 +233,11 @@ const listing = (added: readonly AddedTool[]): Listing => ({
 
 /** How long a session start waits for the agent's recent notes. */
 const NOTES_WAIT_MS = 2_000;
+/** The label of a base prompt that a saved session prompt got later. */
+const BASE_LABEL = "base ";
+/** The base prompt in a system prompt. */
+const baseOf = (systemPrompt: string) =>
+  promptSections(systemPrompt).find(({ tag }) => tag === "base")?.body ?? "";
 
 /** A turn's run returns once Claude has it, so this bounds only the hand-over. */
 export const HANDOVER_MS = 2 * 60_000;
@@ -1984,6 +1993,23 @@ export class ClaudeRuntime {
             session,
           );
       },
+      // The saved prompt shows the base sections again when a session
+      // resumes on other ones than it shows last. It is read from what is
+      // saved, so this also holds after the app starts again.
+      resumed: (session, text) => {
+        if (this.target) return;
+        const base = baseOf(text);
+        const parts = this.prompts(agent).get(session) ?? [];
+        const shown =
+          parts.filter(({ label }) => label.startsWith(BASE_LABEL)).at(-1)
+            ?.text ??
+          (parts[0] && baseOf(parts[0].text));
+        if (shown !== undefined && shown !== base)
+          void this.prompts(agent).add(session, {
+            label: `${BASE_LABEL}${new Date().toISOString()}`,
+            text: base,
+          });
+      },
       onChange: () => this.notify(),
       fingerprint: (key) =>
         JSON.stringify([
@@ -2000,6 +2026,9 @@ export class ClaudeRuntime {
           entry.memory,
           addedKey(this.added()),
           this.credentials,
+          // The base prompt's sections: a change gives an idle session the
+          // new prompt at its next turn.
+          entry.handle?.promptSections?.(),
         ]),
       launch: async (key) => {
         const { workspace, instructions, scope } = entry.config;
@@ -2063,6 +2092,7 @@ export class ClaudeRuntime {
             team: entry.team,
             ...(memory === undefined ? {} : { memory }),
             notes,
+            sections: handle?.promptSections?.(),
           }),
         };
       },

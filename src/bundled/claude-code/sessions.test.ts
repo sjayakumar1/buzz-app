@@ -46,6 +46,7 @@ function sessions(
     spare: Spare;
     tools: ToolServer;
     started: (sessionId: string, systemPrompt: string) => void;
+    resumed: (sessionId: string, systemPrompt: string) => void;
     agent: Readonly<{ pubkey: string; relay: string }>;
     /** The host refuses every process, as at its process limit. */
     full: boolean;
@@ -92,6 +93,7 @@ function sessions(
     fingerprint: () => model,
     newId: () => `new-${++ids}`,
     ...(options.started ? { started: options.started } : {}),
+    ...(options.resumed ? { resumed: options.resumed } : {}),
   });
   const claudes = () =>
     fake.processes.filter((process) => process.id === "claude");
@@ -532,7 +534,8 @@ it("resumes a saved conversation after its process stops", async () => {
   vi.useFakeTimers();
   const store = memoryStore();
   const started = vi.fn();
-  const { pool, claudes } = sessions({ store, started });
+  const again = vi.fn();
+  const { pool, claudes } = sessions({ store, started, resumed: again });
   await pool.deliver("c/root", "first", 1);
   const first = claudes()[0];
   vi.advanceTimersByTime(IDLE_MS + 1);
@@ -544,8 +547,10 @@ it("resumes a saved conversation after its process stops", async () => {
   expect(resumed?.options.args).toContain("new-1");
   expect(resumed?.prompts).toEqual(["later"]);
   expect(store.get("c/root")).toMatchObject({ id: "new-1", seen: 5 });
-  // Only the new session tells what it started with; the resume does not.
+  // Only the new session tells what it started with; the resume tells what
+  // it was resumed with.
   expect(started.mock.calls).toEqual([["new-1", "prompt", undefined]]);
+  expect(again.mock.calls).toEqual([["new-1", "prompt"]]);
 });
 
 it("offers the conversation used longest ago that is doing nothing, to stop", async () => {
