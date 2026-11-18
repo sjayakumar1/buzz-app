@@ -93,7 +93,10 @@ import {
   readProject,
   worksElsewhere,
 } from "../../features/agent-harness/project";
-import { sectionsOf } from "../../features/agent-harness/sections/compose";
+import {
+  placeOf,
+  sectionsOf,
+} from "../../features/agent-harness/sections/compose";
 import {
   type GooseProcess,
   REQUEST_TIMEOUT_MS,
@@ -1320,6 +1323,7 @@ export class GooseRuntime {
             // A conversation's prompt has the sections of the plugin that
             // manages it.
             sections: sectionsOf(entry.handle, conversation),
+            place: placeOf(conversation),
           }),
         };
       },
