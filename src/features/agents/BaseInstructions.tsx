@@ -91,6 +91,9 @@ const keptChoices = (
   );
 
 const prose = "m-0 whitespace-pre-wrap break-words text-body-sm text-subtle";
+const names = new Intl.ListFormat("en", { type: "conjunction" });
+const canReplace = (plugins: readonly string[]) =>
+  `${names.format(plugins)} can replace this in chats ${plugins.length > 1 ? "they manage" : "it manages"}.`;
 /** The choice that takes focus when the control that has it leaves: its
  * section's, or the first one for the form's own actions. */
 const choiceNear = (from: Element) =>
@@ -98,7 +101,15 @@ const choiceNear = (from: Element) =>
     from.closest("[data-section]") ?? from.closest("form")
   )?.querySelector<HTMLElement>('[role="combobox"]') ?? null;
 
-export function BaseInstructions({ store }: { store: AgentStore }) {
+export function BaseInstructions({
+  store,
+  replacedBy,
+}: {
+  store: AgentStore;
+  /** The names of the plugins that can replace a section's text in the
+   * chats they manage. */
+  replacedBy?: ((section: string) => readonly string[]) | undefined;
+}) {
   const [saved, setSaved] = useState(() => ownerSections(store));
   const [draft, setDraft] = useState(() => drafts(saved));
   const [saving, setSaving] = useState(false);
@@ -149,9 +160,15 @@ export function BaseInstructions({ store }: { store: AgentStore }) {
       setSaving(false);
     }
   };
+  /** The names of the plugins that can replace `section`. */
+  const plugins = (section: Section) =>
+    section.plugin ? (replacedBy?.(section.id) ?? []) : [];
   /** What a section that the owner cannot configure is, in a few words. */
-  const fixed = (section: Section) =>
-    typeof section.text === "string" ? "Always on" : "Set by Buzz";
+  const fixed = (section: Section) => {
+    const able = plugins(section);
+    if (able.length) return canReplace(able);
+    return typeof section.text === "string" ? "Always on" : "Set by Buzz";
+  };
   const unused = Object.entries(saved.unused);
 
   return (
@@ -185,13 +202,35 @@ export function BaseInstructions({ store }: { store: AgentStore }) {
               const problem = mode === "custom" ? textProblem(text) : undefined;
               const count = `${bytes(text).toLocaleString("en")} of ${SECTION_TEXT_BYTES.toLocaleString("en")} bytes`;
               const notice = `${noticeId}-${section.id}`;
+              const able = plugins(section);
+              const pluginNote = !able.length
+                ? undefined
+                : mode === "default"
+                  ? canReplace(able)
+                  : // The owner's choice wins over a plugin's text.
+                    `Your choice also applies in chats that ${names.format(able)} ${able.length > 1 ? "manage" : "manages"}.`;
+              const pluginNoteId = `${notice}-plugins`;
               return (
                 <div key={section.id} data-section="" className="grid gap-2">
                   <Select
                     variant="preference"
                     label={title}
-                    description={changed ? "Default changed" : undefined}
-                    describedBy={changed ? notice : undefined}
+                    description={
+                      changed || pluginNote ? (
+                        <>
+                          {changed && "Default changed"}
+                          {changed && pluginNote && ". "}
+                          {pluginNote && (
+                            <span id={pluginNoteId}>{pluginNote}</span>
+                          )}
+                        </>
+                      ) : undefined
+                    }
+                    describedBy={
+                      [pluginNote && pluginNoteId, changed && notice]
+                        .filter(Boolean)
+                        .join(" ") || undefined
+                    }
                     value={mode}
                     // Read-only, not disabled: a choice takes the focus when
                     // Save leaves, and a disabled control cannot.
