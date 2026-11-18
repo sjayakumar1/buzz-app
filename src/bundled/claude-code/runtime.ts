@@ -1757,6 +1757,7 @@ export class ClaudeRuntime {
     const reading = solo
       ? readProject(
           canvas && owner ? () => canvas(channelId, owner) : undefined,
+          Boolean(reads && this.folder(agent.key, key)),
         )
       : Promise.resolve(undefined);
     let earlier: readonly EventData[] = [];
