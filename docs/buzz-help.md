@@ -1576,7 +1576,8 @@ default Huddle voice.
   sections are always on, or Buzz sets them for the conversation; **All
   sections** shows the default text of each. A plugin that is on can declare
   sections that it replaces in the chats it manages: its install review lists
-  them. Each section that such a plugin declared names the plugin.
+  them. For example, such a plugin can set where an agent's work happens in a
+  chat it manages. Each section that such a plugin declared names the plugin.
   When you choose Off or Custom for one of them, your own choice also applies
   in those chats. A choice applies to all your
   agents on this device, not on your other devices, and each agent gets it

@@ -215,6 +215,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
     id: TYPE_ID,
     execution: true,
     conversationFolders: true,
+    conversationSections: true,
     hooks: { events: CLAUDE_HOOK_EVENTS },
     retire: (pubkey) => runtime.retire(pubkey),
     protection: true,

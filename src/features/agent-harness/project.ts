@@ -13,6 +13,12 @@ import {
   workspaceDirectories,
 } from "../solo/workspace";
 import { unframed } from "./plugin-wake";
+import type { SectionChoices } from "./sections/choices";
+import { replacedBy } from "./sections/compose";
+
+/** A Canvas the owner's side approved. `agent`: one of the owner's attested
+ * agents wrote it, not the owner. */
+export type OwnerCanvas = Readonly<{ content: string; agent?: true }>;
 
 export type Project = Readonly<{
   /** The prompt section; empty when the Canvas is. */
@@ -43,24 +49,39 @@ export class ProjectSource {
   }
 }
 
-/** `ownFolder`: the conversation works in a folder of its own, so the
+/** Whether a chat's Canvas does not say where its work happens: the
+ * conversation has a `folder` of its own, or the plugin that manages it
+ * replaced the working location rule. */
+export const worksElsewhere = (
+  folder: string | undefined,
+  choices: SectionChoices | undefined,
+) => !!folder || replacedBy("working-location", choices) === "plugin";
+
+/** `elsewhere`: the chat's work happens elsewhere (`worksElsewhere`), so the
  * Canvas's folders are for reading, unless its owner wrote worktree rules
  * for them by hand. The section states the rule for the folders it lists;
- * the base prompt's working location rule points here. */
+ * the base prompt's working location rule points here. It also says who
+ * wrote the Canvas, which the base prompt ranks it by. */
 export function project(
-  canvas: string | undefined,
-  ownFolder = false,
+  canvas: OwnerCanvas | undefined,
+  elsewhere = false,
 ): Project {
-  if (!canvas?.trim()) return NO_PROJECT;
-  const directories = workspaceDirectories(canvas);
+  const content = canvas?.content;
+  if (!content?.trim()) return NO_PROJECT;
+  // Only the owner's own hand edit is the owner's rule for the chat.
+  const ownerWrote = !canvas?.agent;
+  const directories = workspaceDirectories(content);
   const list = directories.map((folder) => `\`${folder}\``).join(", ");
   const folders = !directories.length
     ? ""
-    : ownFolder
-      ? ` These folders hold code that is relevant to this chat: ${list}.${ownerWorktreeRules(canvas) ? "" : " They are for reading."}`
+    : elsewhere
+      ? ` These folders hold code that is relevant to this chat: ${list}.${ownerWrote && ownerWorktreeRules(content) ? "" : " They are for reading."}`
       : ` This chat's work happens in these folders, not your own workspace: ${list}. To change files there, follow this Canvas's rule for them; your workspace keeps your notes.`;
+  const standing = ownerWrote
+    ? "which your owner wrote: their standing instructions for this chat, which your owner's messages override"
+    : "which an agent wrote: standing instructions for this chat, which your owner's messages and your base instructions override";
   return {
-    section: `<workspace-canvas>\nThis Solo chat's Canvas as of this message: its standing instructions for this chat, which the owner's messages override. It replaces any earlier workspace Canvas.${folders}\n\n${unframed(agentCanvas(canvas, ownFolder).trim())}\n</workspace-canvas>`,
+    section: `<workspace-canvas>\nThis Solo chat's Canvas as of this message, ${standing}. It replaces any earlier workspace Canvas.${folders}\n\n${unframed(agentCanvas(content, elsewhere, ownerWrote).trim())}\n</workspace-canvas>`,
     directories,
   };
 }
@@ -68,10 +89,11 @@ export function project(
 /** How long a turn waits for its chat's Canvas. */
 export const CANVAS_TIMEOUT_MS = 4_000;
 
-/** The channel's Canvas text when `owner`, or an agent they attest, approved its
- * current head; undefined when it has none or someone else wrote it. A chat
- * the owner's device is still `starting` answers with the Canvas it starts
- * with, before the relay has it. */
+/** The channel's Canvas when `owner`, or an agent they attest, approved its
+ * current head, with which of them wrote it; undefined when it has none or
+ * someone else wrote it. A chat the owner's device is still `starting`
+ * answers with the Canvas it starts with, before the relay has it: the
+ * owner's own. */
 export async function ownerCanvas(
   canvas:
     | Readonly<{
@@ -82,12 +104,16 @@ export async function ownerCanvas(
   owner: string,
   channelId: string,
   starting?: string,
-): Promise<string | undefined> {
-  if (starting !== undefined) return starting || undefined;
+): Promise<OwnerCanvas | undefined> {
+  if (starting !== undefined)
+    return starting ? { content: starting } : undefined;
   if (!canvas?.available) return undefined;
   const head = await canvas.read(channelId);
   if (!head) return undefined;
-  if (await approvedCanvas(head, owner)) return head.content;
+  if (await approvedCanvas(head, owner))
+    return head.pubkey === owner
+      ? { content: head.content }
+      : { content: head.content, agent: true };
   console.warn(
     "Ignoring a Canvas its owner's side has not approved",
     channelId,
@@ -98,8 +124,8 @@ export async function ownerCanvas(
 /** The chat's Canvas from `read`, or undefined when it could not be read in
  * time or there is no reader: the caller keeps what it knew. */
 export async function readCanvas(
-  read: (() => Promise<string | undefined>) | undefined,
-): Promise<{ text: string | undefined } | undefined> {
+  read: (() => Promise<OwnerCanvas | undefined>) | undefined,
+): Promise<{ text: OwnerCanvas | undefined } | undefined> {
   if (!read) return undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -124,9 +150,9 @@ export async function readCanvas(
 
 /** The chat's project from `read`, or undefined as for `readCanvas`. */
 export async function readProject(
-  read: (() => Promise<string | undefined>) | undefined,
-  ownFolder = false,
+  read: (() => Promise<OwnerCanvas | undefined>) | undefined,
+  elsewhere = false,
 ): Promise<Project | undefined> {
   const canvas = await readCanvas(read);
-  return canvas && project(canvas.text, ownFolder);
+  return canvas && project(canvas.text, elsewhere);
 }
