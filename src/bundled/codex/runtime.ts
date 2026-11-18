@@ -3552,15 +3552,20 @@ export class CodexRuntime {
 
   /** Whether a thread that started with `sections` can be given `base`.
    * One from before its sections were kept cannot be told which of them
-   * the owner changed, so it starts fresh once. A remote thread is kept by
-   * design, as restarting it would stop the conversation with a reset
-   * error: it keeps the sections it started with until the owner chooses
-   * New. */
+   * changed, so it starts fresh once. A remote thread is kept by design for
+   * the owner's choices, as restarting it would stop the conversation with
+   * a reset error: it keeps the sections it started with until the owner
+   * chooses New. A plugin's text is not the owner's to wait for, so the
+   * remote thread asks for New then. */
   private keepsSections(
     sections: Saved["sections"],
-    base: Pick<ReturnType<typeof composeBase>, "custom">,
+    base: Pick<ReturnType<typeof composeBase>, "custom" | "plugin">,
   ) {
-    return !base.custom || sections?.layout === LAYOUT || !!this.target;
+    return (
+      !base.custom ||
+      sections?.layout === LAYOUT ||
+      (!!this.target && !base.plugin)
+    );
   }
 
   async loadThread(
@@ -3608,10 +3613,9 @@ export class CodexRuntime {
       // tools starts fresh.
       const added = this.added();
       const tools = addedKey(added);
-      const resuming =
-        existing?.workspace === workspace &&
-        (existing.tools ?? "") === tools &&
-        this.keepsSections(existing.sections, base);
+      const same =
+        existing?.workspace === workspace && (existing.tools ?? "") === tools;
+      const resuming = same && this.keepsSections(existing?.sections, base);
       type Started = { thread: { id: string; cwd: string } };
       const start = () =>
         rpc.request<Started>("thread/start", {
@@ -3627,7 +3631,9 @@ export class CodexRuntime {
       if (this.target && existing && !resuming)
         throw Object.assign(
           new Error(
-            "The Codex workspace or tools changed. Start a new session to continue.",
+            same
+              ? "The base instructions of this conversation changed. Start a new session to continue."
+              : "The Codex workspace or tools changed. Start a new session to continue.",
           ),
           { code: "EXECUTION_SESSION_RESET_REQUIRED" },
         );
