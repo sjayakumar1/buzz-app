@@ -156,12 +156,10 @@ function subscribeDocumentActive(listener: () => void) {
   };
 }
 const TIMELINE_PLACE = "timeline";
-// Activity folding reads list order as time: off while a presentation shows.
 const NO_ROWS: readonly ChannelMessage[] = Object.freeze([]);
 const readable = (row: ChannelMessage) => !row.membership && !row.huddle;
 const topLevel = (row: ChannelMessage) =>
   readable(row) && !row.threadRootId && !row.replyParentId;
-/** The newest row by time, wherever a presentation draws it. */
 const newest = (rows: readonly ChannelMessage[]) =>
   rows.reduce<ChannelMessage | undefined>(
     (latest, row) =>
@@ -307,8 +305,6 @@ function Timeline({
   startsThreads = true,
 }: ChannelTimelineProps) {
   useMessageSelectionCopy();
-  // A plugin's rows replace the host's while it presents. What reads the host's
-  // own history (its unread line, arrivals, paging) keeps the host's rows.
   const [arrangement, display] = useArrangement({
     session: queries,
     channelId,
@@ -316,10 +312,7 @@ function Timeline({
     limits: CHANNEL_LIMITS,
     channel: !transient,
   });
-  // A presentation's order is its own, so no row merges into another's bubble
-  // or sits under a day divider; each row's header carries its date.
   const arranged = !!display;
-  // Read when a place is saved; a presentation's rows are not the reader's place.
   const arrangedNow = useRef(false);
   arrangedNow.current = arranged;
   const shownIntro = (
@@ -854,8 +847,6 @@ function Timeline({
     (navigation?.target.kind === "conversation" && !returning
       ? navigation.target.messageId
       : undefined);
-  // A presentation may leave the opened message out: its reveal has nothing to
-  // show, so it yields (completing as opened) and the plugin sees `requestedId`.
   const targetHidden =
     arranged &&
     !!requestedId &&
@@ -1005,7 +996,6 @@ function Timeline({
     ids: ReadonlySet<string>;
     floor: number;
     paging: boolean;
-    /** The presentation these rows belong to; undefined for the host's. */
     owner: number | undefined;
   }>({
     order: [],
@@ -1369,8 +1359,6 @@ function Timeline({
       ? newest(display.rows.filter(topLevel))
       : window.rows.filter(topLevel).at(-1)
     )?.id,
-    // A presentation's list order is its own: the last row drawn is the end a
-    // dwell catches up at, and rows it leaves out stay unread.
     endMessageId: display ? rows.filter(readable).at(-1)?.id : undefined,
     partial: !!display && !display.complete,
     controls: readerBar,
@@ -1389,8 +1377,6 @@ function Timeline({
       !boundaryCandidate.awaitingRepair &&
       !(awayPending && !boundaryPending),
   });
-  // Where the reader was when the rows changed owner: kept, or sent to an end by
-  // the presentation's `place`. Applied once, before the hold effect reads it.
   const placement = usePlace(arrangement, () => {
     const element = scroller.current;
     const anchor = element ? positionAt(element).anchor : undefined;
@@ -1401,7 +1387,6 @@ function Timeline({
   const owner = display?.revision;
   const swapped = edges.current.owner !== owner;
   useLayoutEffect(() => {
-    // A presentation made in this commit's layout effects reaches its rows in the next.
     if (arrangement?.snapshot() !== display || !rows.length) return;
     const ids = new Set(rows.map((row) => row.id));
     const at = placement.take(
@@ -1427,7 +1412,6 @@ function Timeline({
     settled.current = false;
     restoredAnchor.current = undefined;
     measuredPosition.current = null;
-    // Before paint; positioning then keeps it through late measurement.
     handle.current?.scrollToIndex(
       index,
       at === "end" ? { align: "end" } : { align: "start", offset: -y },
@@ -1800,8 +1784,6 @@ function Timeline({
       paging: loadingOlder.current,
       owner,
     };
-    // Another row set's arrivals are not the reader's: none in the commit that
-    // changes owner. A presentation's own ids are fixed until it presents again.
     if (
       arrivals > 0 &&
       !swapped &&
@@ -2513,7 +2495,6 @@ function Timeline({
     <MessageContextMenus>
       {arrangement && extensions?.accessories ? (
         <div className={styles.timelineColumn}>
-          {/* Above the scroller, never inside it. */}
           <div ref={readerBar} className={styles.readerBar}>
             <ComposerAccessories
               registry={extensions.accessories}

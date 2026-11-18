@@ -93,7 +93,6 @@ function OwnedAccessory({
     arrangement?.subscribe ?? noSubscription,
     () => arrangement?.status(entry),
   );
-  // An unmounted accessory shows nothing.
   useLayoutEffect(
     () => () => {
       arrangement?.present(entry, null);
