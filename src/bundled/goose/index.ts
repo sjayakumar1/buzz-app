@@ -118,6 +118,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
     id: TYPE_ID,
     retire: (pubkey) => runtime.retire(pubkey),
     protection: true,
+    conversationSections: true,
     title: "Goose",
     icon: GooseLogoIcon,
     description:
