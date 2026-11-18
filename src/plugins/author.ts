@@ -92,6 +92,9 @@ export type {
   ComposerReplacement,
   ComposerAccessory,
   ComposerAccessoryProps,
+  ConversationPresentation,
+  PresentationLimits,
+  PresentResult,
   ComposerResource,
   ComposerCaptureProps,
   AttachmentRenderer,
@@ -108,6 +111,14 @@ export type {
   TargetOpener,
 } from "../features/conversation/contracts";
 export type { RelayData, RelaySnapshot } from "../features/relay/service";
+export type { RelaySession } from "../features/relay/session";
+export type {
+  EventData,
+  ReadFilter,
+  RelayEvent,
+} from "../features/relay/events";
+export type { ReadOptions } from "../features/relay/reader";
+export type { ChannelMessage } from "../features/relay/contracts";
 export type {
   ArtifactSyncFilter,
   ArtifactSyncSnapshot,
