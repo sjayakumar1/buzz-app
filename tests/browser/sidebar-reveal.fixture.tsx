@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { useSidebarView } from "../../src/bundled/channels/useSidebarView";
 import { ChannelSidebarRow } from "../../src/bundled/channels/ChannelSidebarRow";
 import { SidebarSection } from "../../src/bundled/channels/SidebarSection";
+import { SidebarUnread } from "../../src/bundled/channels/SidebarUnread";
 import { SidebarContributionSection } from "../../src/features/channel-navigation/SidebarContributionSection";
 import { ChannelSidebarDnd } from "../../src/features/channel-navigation/ChannelSidebarDnd";
 import type { Navigation } from "../../src/features/navigation/controller";
@@ -21,6 +22,7 @@ type State = {
   at: string;
   rows: number[];
   relocated?: boolean;
+  anchored?: boolean | undefined;
 };
 const rows = (count: number) => Array.from({ length: count }, (_, i) => i);
 const contributionTarget: OpenTarget = {
@@ -72,22 +74,19 @@ declare global {
   }
 }
 
-function Sidebar({ at, rows }: Omit<State, "mounted">) {
+function Sidebar({ at, rows, anchored }: Omit<State, "mounted">) {
   const view = useSidebarView("fixture", true, at);
   const target =
     at === "conversation:late"
       ? contributionTarget
       : ({ version: 1, kind: "home" } satisfies OpenTarget);
-  return (
-    <nav
-      aria-label="Sidebar"
-      ref={view.list}
-      style={{ height: 200, overflowY: "auto", width: 200 }}
-    >
+  const content = (
+    <>
       {rows.map((id) => (
         <div
           key={id}
           data-row={id}
+          data-variant="row"
           aria-current={at === `row:${id}` ? "page" : undefined}
           style={{ height: 40 }}
         >
@@ -113,6 +112,34 @@ function Sidebar({ at, rows }: Omit<State, "mounted">) {
           onRowsCommitted={view.retryReveal}
         />
       </ChannelSidebarDnd>
+    </>
+  );
+  if (anchored)
+    return (
+      <div
+        style={{
+          height: 200,
+          width: 200,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <SidebarUnread
+          listRef={view.list}
+          adjustScrollAnchor={view.adjustScrollAnchor}
+          captureScrollAnchor={view.captureScrollAnchor}
+        >
+          {content}
+        </SidebarUnread>
+      </div>
+    );
+  return (
+    <nav
+      aria-label="Sidebar"
+      ref={view.list}
+      style={{ height: 200, overflowY: "auto", width: 200 }}
+    >
+      {content}
     </nav>
   );
 }
@@ -163,7 +190,9 @@ function Harness() {
         ))}
       </nav>
     );
-  return state.mounted ? <Sidebar at={state.at} rows={state.rows} /> : null;
+  return state.mounted ? (
+    <Sidebar at={state.at} rows={state.rows} anchored={state.anchored} />
+  ) : null;
 }
 
 const root = document.getElementById("root");

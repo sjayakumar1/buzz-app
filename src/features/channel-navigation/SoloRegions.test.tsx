@@ -102,6 +102,7 @@ function mount(
           revealAgain,
           beforeReveal: () => () => {},
           adjustScrollAnchor: () => {},
+          captureScrollAnchor: { current: undefined },
         }}
       />
     );

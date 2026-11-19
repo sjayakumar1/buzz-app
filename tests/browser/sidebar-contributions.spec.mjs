@@ -364,9 +364,9 @@ appTest.describe("sidebar refresh", () => {
       const promotedId = await rows
         .nth(12)
         .getAttribute("data-solo-destination-id");
-      const position = () =>
+      const position = (id = anchorId) =>
         rows
-          .and(page.locator(`[data-solo-destination-id="${anchorId}"]`))
+          .and(page.locator(`[data-solo-destination-id="${id}"]`))
           .evaluate((row) => {
             const port = row.closest('nav[aria-label="Subscribed channels"]');
             return (
@@ -397,7 +397,72 @@ appTest.describe("sidebar refresh", () => {
         "data-solo-destination-id",
         promotedId,
       );
-      await expect.poll(position).toBe(before);
+      await expect.poll(() => position()).toBe(before);
+
+      // Move the first visible row and remove a row further down in the same
+      // refresh. The remaining visible neighbor should keep its place.
+      const order = await rows.evaluateAll((elements) =>
+        elements.map((element) => element.dataset.soloDestinationId),
+      );
+      const index = order.indexOf(anchorId);
+      const neighbor = order[index + 1];
+      const removed = order[index + 2];
+      const neighborBefore = await position(neighbor);
+      await page.evaluate(
+        ({ removed, anchorId }) =>
+          window.fixtureSoloRegion.present([removed], [], anchorId),
+        { removed, anchorId },
+      );
+      await expect(rows.first()).toHaveAttribute(
+        "data-solo-destination-id",
+        anchorId,
+      );
+      await expect(rows).toHaveCount(soloChannels.length - 1);
+      await expect.poll(() => position(neighbor)).toBe(neighborBefore);
+
+      const focusOrder = await rows.evaluateAll((elements) =>
+        elements.map((element) => element.dataset.soloDestinationId),
+      );
+      const next = focusOrder[focusOrder.indexOf(neighbor) + 1];
+      await viewport.evaluate(
+        async (port, offset) => {
+          port.scrollTop += offset - 12;
+          await new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+        },
+        await position(neighbor),
+      );
+      const focused = rows.and(
+        page.locator(`[data-solo-destination-id="${neighbor}"]`),
+      );
+      await focused.evaluate((row) => row.focus({ preventScroll: true }));
+      await expect(focused).toBeFocused();
+      await page.evaluate(
+        ({ removed, neighbor, next }) =>
+          window.fixtureSoloRegion.present([removed, neighbor], [], next),
+        { removed, neighbor, next },
+      );
+      await expect(rows.first()).toHaveAttribute(
+        "data-solo-destination-id",
+        next,
+      );
+      await expect(focused).toHaveCount(0);
+      await expect
+        .poll(() =>
+          viewport.evaluate((port) => {
+            const focus = document.activeElement;
+            if (
+              !port.contains(focus) ||
+              !focus.hasAttribute("data-solo-destination-id")
+            )
+              return false;
+            const frame = port.getBoundingClientRect();
+            const box = focus.getBoundingClientRect();
+            return box.top >= frame.top && box.bottom <= frame.bottom;
+          }),
+        )
+        .toBe(true);
     },
   );
 });

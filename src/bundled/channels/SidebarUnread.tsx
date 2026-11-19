@@ -82,12 +82,14 @@ export function SidebarUnread({
   children,
   listRef,
   adjustScrollAnchor,
+  captureScrollAnchor,
   dmPreviews,
   floatingAction,
 }: {
   children: ReactNode;
   listRef?: RefObject<HTMLElement | null>;
   adjustScrollAnchor?: (top: number) => void;
+  captureScrollAnchor?: RefObject<(() => void) | undefined>;
   dmPreviews?: ReadonlyMap<string, UnreadDmPreview>;
   floatingAction?: RefObject<HTMLDivElement | null> | undefined;
 }) {
@@ -96,7 +98,6 @@ export function SidebarUnread({
   const content = useRef<HTMLDivElement>(null);
   const upperCue = useRef<HTMLDivElement>(null);
   const lowerCue = useRef<HTMLDivElement>(null);
-  const captureAnchor = useRef<() => void>(undefined);
   const [edges, setEdges] = useState<Edges>({ above: [], below: [] });
   useEffect(() => {
     const viewport = list.current;
@@ -108,7 +109,7 @@ export function SidebarUnread({
     if (anchor) {
       viewport.style.overflowAnchor = "none";
       anchor.capture();
-      captureAnchor.current = anchor.capture;
+      if (captureScrollAnchor) captureScrollAnchor.current = anchor.capture;
     }
     let frame = 0;
     const measure = () => {
@@ -270,7 +271,7 @@ export function SidebarUnread({
       viewport.removeEventListener("scroll", scrolled);
       if (anchor) {
         anchor.dispose();
-        captureAnchor.current = undefined;
+        if (captureScrollAnchor) captureScrollAnchor.current = undefined;
         viewport.style.removeProperty("overflow-anchor");
       }
       for (const edge of [cue, upper]) {
@@ -280,7 +281,7 @@ export function SidebarUnread({
       cue?.removeAttribute("data-lifted");
       cue?.removeAttribute("data-preview-limit");
     };
-  }, [list, floatingAction, adjustScrollAnchor]);
+  }, [list, floatingAction, adjustScrollAnchor, captureScrollAnchor]);
   const reveal = (edge: keyof Edges) => {
     const viewport = list.current;
     if (!viewport) return;
@@ -302,7 +303,7 @@ export function SidebarUnread({
         rect.top -
         viewport.getBoundingClientRect().top -
         (viewport.clientHeight - rect.height) / 2;
-      captureAnchor.current?.();
+      captureScrollAnchor?.current?.();
       // Continue keyboard navigation at the revealed row, not the start of the
       // roster. Its existing focus preparation still applies; focus is not selection.
       row.focus({ preventScroll: true });

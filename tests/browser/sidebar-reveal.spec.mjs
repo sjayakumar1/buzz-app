@@ -194,6 +194,40 @@ test("late contributed rows retry the sidebar reveal without moving the owner", 
   expect(errors).toEqual([]);
 });
 
+test("a delayed reveal that lands in place takes precedence over the old anchor", async ({
+  page,
+}) => {
+  const { errors } = watchPageErrors(page);
+  await open(page);
+  await update(page, { mounted: true, anchored: true });
+  const sidebar = page.getByRole("navigation", { name: "Subscribed channels" });
+  const current = sidebar.locator('[data-row="0"]');
+  await expect(current).toHaveAttribute("aria-current", "page");
+  const baseline = await sidebar.evaluate((viewport) => {
+    const row = viewport.querySelector('[data-row="4"]');
+    viewport.scrollTop +=
+      row.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+    return viewport.scrollTop;
+  });
+  expect(baseline).toBeGreaterThan(0);
+  await settle(page);
+  await update(page, { at: "row:55" });
+  await expect(current).not.toHaveAttribute("aria-current", "page");
+  await page.evaluate(() => {
+    const rows = window.sidebar.rows(50);
+    rows.splice(4, 0, 55);
+    window.sidebar.update({ rows });
+  });
+  const destination = sidebar.locator('[data-row="55"]');
+  await expect(destination).toHaveAttribute("aria-current", "page");
+  await settle(page);
+  expect(await sidebar.evaluate((viewport) => viewport.scrollTop)).toBe(
+    baseline,
+  );
+  await expect(destination).toBeInViewport({ ratio: 1 });
+  expect(errors).toEqual([]);
+});
+
 test("a user scroll before contributed rows arrive cancels their reveal", async ({
   page,
 }) => {

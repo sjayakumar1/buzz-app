@@ -96,9 +96,15 @@ export function sidebarScrollAnchor(
         return;
       // A single task can move past otherwise stationary neighbors. Use the
       // middle shift when all three survive so it cannot pull the viewport.
+      // With two, prefer the row that moved less in the content.
+      const browserShift = current - scrollTop;
       const shift =
-        shifts.length === 3 ? shifts.sort((a, b) => a - b)[1] : shifts[0];
-      if (shift && Math.abs(shift + current - scrollTop) >= 0.5)
+        shifts.length === 3
+          ? shifts.sort((a, b) => a - b)[1]
+          : shifts.sort(
+              (a, b) => Math.abs(a + browserShift) - Math.abs(b + browserShift),
+            )[0];
+      if (shift && Math.abs(shift + browserShift) >= 0.5)
         adjust(current + shift);
     }
     capture();

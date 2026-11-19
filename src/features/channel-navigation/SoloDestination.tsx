@@ -510,6 +510,7 @@ function useDestinationFocus(
     if (!visible) return;
     const node = root.current;
     const region = node?.closest("[data-sidebar-section]");
+    const viewport = node?.closest("nav[data-scroll-fade]");
     return () => {
       const owner = document.activeElement?.closest(
         "[data-solo-destination-root]",
@@ -540,9 +541,28 @@ function useDestinationFocus(
             '[data-sidebar-section^="solo-region:"] summary',
           ),
         ];
-        for (const candidate of candidates) {
-          if (!candidate || candidate.closest("[hidden], [inert]")) continue;
-          candidate.focus({ preventScroll: true });
+        const available = candidates.filter(
+          (candidate): candidate is HTMLElement =>
+            !!candidate && !candidate.closest("[hidden], [inert]"),
+        );
+        const frame = viewport?.getBoundingClientRect();
+        const inView =
+          frame &&
+          available.find((candidate) => {
+            if (!viewport?.contains(candidate)) return false;
+            const box = candidate.getBoundingClientRect();
+            return (
+              box.height > 0 &&
+              box.top >= frame.top &&
+              box.bottom <= frame.bottom
+            );
+          });
+        // A refresh can move the next logical row offscreen. Prefer focus
+        // that the user can see without losing their place in the sidebar.
+        inView?.focus({ preventScroll: true });
+        if (document.activeElement !== document.body) return;
+        for (const candidate of available) {
+          candidate.focus();
           if (document.activeElement === candidate) break;
         }
       });
