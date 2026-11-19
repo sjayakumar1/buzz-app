@@ -2171,6 +2171,11 @@ function ThreadMessages({
       void view.loadMore();
     } else void view.refresh();
   };
+  const newestReply = shownReplies.reduce<ChannelMessage | undefined>(
+    (latest, row) =>
+      !latest || row.createdAt > latest.createdAt ? row : latest,
+    undefined,
+  )?.id;
   return (
     <MessageEditScope>
       <Reading
@@ -2185,15 +2190,9 @@ function ThreadMessages({
         // A visible exact reply can outlive its unavailable root. Until resolved,
         // observe rows individually; an absent root must not mean channel catch-up.
         latestMessageId={
-          snapshot.root
-            ? shownReplies.reduce<ChannelMessage | undefined>(
-                (latest, row) =>
-                  !latest || row.createdAt > latest.createdAt ? row : latest,
-                undefined,
-              )?.id
-            : undefined
+          snapshot.root ? (presented ? endRow : newestReply) : undefined
         }
-        endMessageId={presented ? endRow : undefined}
+        catchUpMessageId={presented ? newestReply : undefined}
         partial={!!display && (!display.complete || collapsed)}
         controls={readerBar}
       />
