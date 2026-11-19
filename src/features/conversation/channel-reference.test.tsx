@@ -239,6 +239,9 @@ it("does not open a message or thread link into a withheld channel until access 
   ]);
   for (const [index, element] of links.entries()) {
     expect(element.getAttribute("aria-disabled")).toBe("true");
+    expect(element.getAttribute("aria-description")).toContain(
+      "aren’t a member",
+    );
     expect(element.getAttribute("href")).toBe(urls[index]);
     fireEvent.click(element);
     fireEvent(
@@ -258,6 +261,7 @@ it("does not open a message or thread link into a withheld channel until access 
   t.answer("secret", { ...crew, private: true, joined: true });
   for (const element of screen.getAllByRole("link")) {
     expect(element.getAttribute("aria-disabled")).toBeNull();
+    expect(element.getAttribute("aria-description")).toBeNull();
     fireEvent.click(element);
   }
   expect(open.mock.calls).toEqual([[urls[0]], [urls[1]]]);
