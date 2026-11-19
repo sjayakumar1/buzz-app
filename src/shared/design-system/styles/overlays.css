@@ -618,6 +618,26 @@
   visibility: hidden;
   pointer-events: none;
 }
+/* Sonner widens a pressed notice's hit area with ::before, slides new notices
+   in from a full height below and slides removed ones out. Each overflows this
+   scrolling viewport, so a scrollbar flashes and shifts the stack. Pointer
+   capture already keeps a swipe on its notice and removed notices are hidden,
+   so neither needs to paint outside the notice, and a new notice rises only
+   within the viewport's padding. data-y-position outranks every Sonner ::before
+   rule. */
+.buzz-toast-viewport[data-sonner-toaster]
+[data-sonner-toast][data-y-position]::before {
+  content: none;
+}
+.buzz-toast-viewport[data-sonner-toaster]
+  [data-sonner-toast][data-mounted="false"] {
+  --y: translateY(var(--space-3));
+}
+.buzz-toast-viewport[data-sonner-toaster]
+  [data-sonner-toast][data-removed="true"] {
+  transform: none;
+  animation: none;
+}
 .buzz-toast-viewport [data-sonner-toast]:focus-visible {
   box-shadow: none;
 }
