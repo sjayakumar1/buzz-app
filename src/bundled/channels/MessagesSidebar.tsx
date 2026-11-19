@@ -294,6 +294,7 @@ function ScopedSidebar({
                         {before}
                         <SidebarUnread
                           listRef={sidebar.list}
+                          adjustScrollAnchor={sidebar.adjustScrollAnchor}
                           dmPreviews={dmPreviews}
                           floatingAction={footer ? floatingAction : undefined}
                         >

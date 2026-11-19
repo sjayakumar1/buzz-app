@@ -327,6 +327,81 @@ appTest.describe("workspace composition", () => {
   );
 });
 
+appTest.describe("sidebar refresh", () => {
+  const soloChannels = Array.from(
+    { length: 16 },
+    (_, i) => `60000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+  );
+  appTest.use({
+    productionBroker: true,
+    channelIds: soloChannels,
+    soloChannels,
+    ownSoloChannels: soloChannels,
+    viewport: { width: 1100, height: 375 },
+  });
+
+  // A repaint can change visible rows while scrollTop stays the same.
+  appTest(
+    "keeps visible Solo rows in place when a task moves above them",
+    async ({ page, app }) => {
+      await page.goto(`${app.origin}/?solo-region-fixture`);
+      await openPage(page, "Messages");
+      const viewport = page.getByRole("navigation", {
+        name: "Subscribed channels",
+      });
+      await expect(
+        viewport.locator(`[data-solo-destination-id="${soloChannels[15]}"]`),
+      ).toBeVisible();
+      await page.evaluate(async (ids) => {
+        for (const id of ids) await window.fixtureSoloRegion.classify(id);
+      }, soloChannels);
+      const rows = viewport.locator(
+        '[data-sidebar-section^="solo-region:"] [data-solo-destination-id]',
+      );
+      await expect(rows).toHaveCount(soloChannels.length);
+      const anchor = rows.nth(6);
+      const anchorId = await anchor.getAttribute("data-solo-destination-id");
+      const promotedId = await rows
+        .nth(12)
+        .getAttribute("data-solo-destination-id");
+      const position = () =>
+        rows
+          .and(page.locator(`[data-solo-destination-id="${anchorId}"]`))
+          .evaluate((row) => {
+            const port = row.closest('nav[aria-label="Subscribed channels"]');
+            return (
+              row.getBoundingClientRect().top - port.getBoundingClientRect().top
+            );
+          });
+      await viewport.evaluate(
+        async (port, offset) => {
+          port.scrollTop += offset - 12;
+          // Let the scroll event record this position before publishing rows.
+          await new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+        },
+        await position(),
+      );
+      const before = await position();
+      expect(before).toBeGreaterThanOrEqual(0);
+      expect(before).toBeLessThan(
+        await viewport.evaluate((port) => port.clientHeight),
+      );
+
+      await page.evaluate(
+        (id) => window.fixtureSoloRegion.present([], [], id),
+        promotedId,
+      );
+      await expect(rows.first()).toHaveAttribute(
+        "data-solo-destination-id",
+        promotedId,
+      );
+      await expect.poll(position).toBe(before);
+    },
+  );
+});
+
 appTest.describe("Focus", () => {
   appTest.use({
     enabledPlugins: ["buzz.focus"],

@@ -12,7 +12,7 @@ declare global {
       state(): SoloRegionProps["state"];
       classify(id: string): Promise<void>;
       createWorkspace(): Promise<void>;
-      present(removed: string[], hidden: string[]): void;
+      present(removed: string[], hidden: string[], first?: string): void;
       status(status: "ready" | "loading"): void;
       addTransientRegion(): Promise<void>;
       removeTransientRegion(): Promise<void>;
@@ -34,7 +34,8 @@ export const soloRegionFixture: BundledPlugin = {
       let binding: SoloRegionBinding;
       let snapshot: SoloRegionSnapshot;
       let removed: string[] = [],
-        hidden: string[] = [];
+        hidden: string[] = [],
+        first: string | undefined;
       let notify = () => {};
       if (!ctx.soloNavigation) throw new Error("Solo navigation unavailable");
       const navigation = ctx.soloNavigation;
@@ -101,7 +102,10 @@ export const soloRegionFixture: BundledPlugin = {
           <>
             {stateFixture && <SavedState state={state} />}
             {hitTargets && <Workspaces ui={ui} binding={binding} />}
-            {[...live]
+            {(first && live.has(first)
+              ? [first, ...[...live].filter((id) => id !== first)]
+              : [...live]
+            )
               .filter((id) => !removed.includes(id))
               .map((id) => (
                 <div
@@ -164,9 +168,10 @@ export const soloRegionFixture: BundledPlugin = {
           snapshot = { ...snapshot, status, revision: snapshot.revision + 1 };
           notify();
         },
-        present(nextRemoved, nextHidden) {
+        present(nextRemoved, nextHidden, nextFirst) {
           removed = nextRemoved;
           hidden = nextHidden;
+          first = nextFirst;
           snapshot = { ...snapshot, revision: snapshot.revision + 1 };
           notify();
         },

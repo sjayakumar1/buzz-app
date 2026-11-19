@@ -101,6 +101,7 @@ function mount(
           retryReveal,
           revealAgain,
           beforeReveal: () => () => {},
+          adjustScrollAnchor: () => {},
         }}
       />
     );
