@@ -880,10 +880,29 @@ pub(crate) async fn app_agent_join(
 #[tauri::command]
 pub(crate) async fn app_agent_delete(
     state: tauri::State<'_, AppAgentHost>,
+    envs: tauri::State<'_, crate::agent_env::AgentEnvs>,
     pubkey: String,
     relay: String,
 ) -> Result<(), String> {
+    forget_env_if_last(&state, &envs, &pubkey, &relay).await?;
     state.delete(pubkey, relay).await
+}
+
+/// Its own environment variables go with its last community, before that row
+/// does, so a failure leaves the row and retrying the removal retries this.
+/// Its started Delete already refuses any further save (`agent_env::eligible`).
+pub(crate) async fn forget_env_if_last(
+    state: &AppAgentHost,
+    envs: &crate::agent_env::AgentEnvs,
+    pubkey: &str,
+    relay: &str,
+) -> Result<(), String> {
+    let agents = state.agents.clone()?;
+    let (key, community) = (pubkey.to_owned(), relay.to_owned());
+    if blocking(move || agents.is_last_membership(&key, &community)).await? {
+        envs.forget(pubkey).await?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

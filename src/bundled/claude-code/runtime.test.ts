@@ -460,6 +460,8 @@ it("hands a mention to its thread's session", async () => {
   expect(claude?.options).not.toHaveProperty("agent");
   expect(claude?.options.args).toContain("--mcp-config");
   expect(claude?.options.cwd).toBe("~/.buzz");
+  // It runs the agent, so it asks for the agent environment variables.
+  expect(claude?.options.secrets).toEqual(["agent-env"]);
   expect(published).toEqual([]);
 });
 

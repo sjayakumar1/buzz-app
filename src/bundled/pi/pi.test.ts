@@ -6,6 +6,13 @@ import type { AgentProtection } from "../../features/agent-protection/service";
 import { Pi, PiStopped } from "./pi";
 import { deferred, fakeHost, type FakeProcess } from "./pi-testing";
 
+const env = vi.hoisted(() => ({
+  own: new Map<string, boolean | undefined>(),
+}));
+vi.mock("../agents/agent-env", () => ({
+  hasOwnEnv: async (agent: string) => env.own.get(agent) ?? false,
+}));
+
 const handlers = () => ({ tool: vi.fn(), event: vi.fn() });
 const evidence = (worker: FakeProcess, operation: string, params: object) =>
   worker.tool(params, `buzz/security/evidence/${operation}`);
@@ -53,6 +60,7 @@ it("starts the host once, with the install script, and pairs each answer with it
   expect(host.processes).toHaveLength(1);
   const [process] = host.processes;
   expect(process?.id).toBe("pi-sh");
+  expect(process?.options.secrets).toEqual(["agent-env"]);
   expect(process?.options.cwd).toBe("~");
   expect(process?.options.args?.[1]).toBe("pi.sh");
   expect(process?.options.args?.at(-1)).toContain("BUZZ_PI_HOST");
@@ -374,6 +382,7 @@ it("isolates protected agents, contains their runtime code and cancels a native 
     );
     if (!worker) throw new Error("Missing protected worker");
     expect(worker.id).toBe("pi-protected-sh");
+    expect(worker.options.secrets).toBeUndefined();
     expect(
       manifest.host.processes.find((process) => process.id === worker.id),
     ).toMatchObject({
@@ -411,6 +420,47 @@ it("isolates protected agents, contains their runtime code and cancels a native 
       host.processes.filter((process) => process.options.protection),
     ).toHaveLength(3);
   } finally {
+    await pi.dispose();
+  }
+});
+
+it("starts an agent with its own list in its own host, and chooses again when a host exits", async () => {
+  const ada = "a".repeat(64);
+  const bo = "b".repeat(64);
+  const host = fakeHost({ ping: (params) => ({ agent: params.agent }) });
+  const pi = new Pi(
+    () => host.spawn,
+    handlers(),
+    () => undefined,
+  );
+  env.own.set(ada, true);
+  try {
+    await pi.request("ping", { agent: ada });
+    await pi.request("ping", { agent: bo });
+    expect(host.processes.map((process) => process.options.envAgent)).toEqual([
+      ada,
+      undefined,
+    ]);
+    // Its list is removed while its host runs: the route holds until it exits.
+    env.own.set(ada, false);
+    await pi.request("ping", { agent: ada });
+    expect(host.processes).toHaveLength(2);
+    host.processes[0]?.exit(0);
+    await pi.request("ping", { agent: ada });
+    expect(host.processes).toHaveLength(2);
+    expect(host.requests("ping").at(-1)?.params.agent).toBe(ada);
+    expect(host.processes[1]?.requests.at(-1)?.params.agent).toBe(ada);
+    // The shared host exits after a list is added: the next start reads it.
+    env.own.set(bo, true);
+    host.processes[1]?.exit(0);
+    await pi.request("ping", { agent: bo });
+    expect(host.processes.at(-1)?.options.envAgent).toBe(bo);
+    // An unreadable list starts on the shared host.
+    env.own.set(ada, undefined);
+    await pi.request("ping", { agent: ada });
+    expect(host.processes.at(-1)?.options.envAgent).toBeUndefined();
+  } finally {
+    env.own.clear();
     await pi.dispose();
   }
 });

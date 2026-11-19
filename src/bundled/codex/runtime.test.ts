@@ -58,6 +58,10 @@ vi.mock("./voice", () => ({
 
 // The plugin registers only in the Mac/Linux desktop app.
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true }));
+const env = vi.hoisted(() => ({ own: new Set<string>() }));
+vi.mock("../agents/agent-env", () => ({
+  hasOwnEnv: async (agent: string) => env.own.has(agent),
+}));
 
 const owner = "a".repeat(64);
 const pubkey = "b".repeat(64);
@@ -728,6 +732,8 @@ it("hands over promptly and runs conversations independently on one server", asy
   await f.runtime.run(f.delivery("@Codex independent", "e".repeat(64)));
   await vi.waitFor(() => expect(f.starts()).toHaveLength(2));
   expect(f.spawn).toHaveBeenCalledTimes(1);
+  // The shared server runs agents, so it asks for their variables.
+  expect(f.spawn.mock.calls[0]?.[1]?.secrets).toEqual(["agent-env"]);
   f.complete(0, "FIRST");
   f.complete(1, "OTHER");
   await vi.waitFor(() => expect(f.publish).toHaveBeenCalledTimes(2));
@@ -1284,6 +1290,28 @@ it("does not clean or log a cleanup error after the last agent closes the server
   } finally {
     vi.useRealTimers();
     error.mockRestore();
+  }
+});
+it("starts an agent with its own list on its own server, and the rest on the shared one", async () => {
+  const f = fixture();
+  const b = second(f);
+  env.own.add("9".repeat(64));
+  try {
+    await f.runtime.run(f.delivery("@Codex first"));
+    await f.runtime.run(b.delivery("@Other second"));
+    await vi.waitFor(() => expect(servers(f)).toHaveLength(2));
+    expect(servers(f).map(([, options]) => options?.envAgent)).toEqual([
+      undefined,
+      "9".repeat(64),
+    ]);
+    expect(
+      servers(f).every(([, options]) =>
+        options?.secrets?.includes("agent-env"),
+      ),
+    ).toBe(true);
+  } finally {
+    env.own.clear();
+    f.runtime.dispose();
   }
 });
 it("reopens the shared server after it exits", async () => {
