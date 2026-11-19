@@ -82,6 +82,11 @@ export type SessionsOptions = Readonly<{
   /** Changes when a setting that a running process fixed has changed, for the
    * conversation `key` when given. */
   fingerprint(key?: string): string;
+  /** Changes when the base prompt's sections for the conversation `key`
+   * change. A plugin can change them at any time, so a process with
+   * background work stops for them only for a new turn, which must run on
+   * them. */
+  sections?(key?: string): string;
   now?(): number;
   newId?(): string;
   /** Told of each new session, never a resumed one, with the prompt it was
@@ -117,6 +122,7 @@ type Live = {
   process: ClaudeProcess;
   submitted?: boolean;
   fingerprint: string;
+  sections?: string | undefined;
   used: number;
   timer?: ReturnType<typeof setTimeout>;
 };
@@ -359,12 +365,7 @@ export class AgentSessions {
       if (opening) await opening;
       if (current && !current()) return { ok: true, undelivered: true };
       let live = this.live.get(key);
-      if (
-        live &&
-        (!live.process.running ||
-          (live.fingerprint !== this.options.fingerprint(key) &&
-            !live.process.busy))
-      ) {
+      if (live && (!live.process.running || this.stale(key, live, true))) {
         this.drop(key, live);
         live = undefined;
       }
@@ -401,8 +402,7 @@ export class AgentSessions {
       if (
         this.live.get(key) !== live ||
         !live.process.running ||
-        (live.fingerprint !== this.options.fingerprint(key) &&
-          !live.process.busy)
+        this.stale(key, live, true)
       )
         continue;
       if (this.options.strictResume) live.submitted = true;
@@ -415,8 +415,7 @@ export class AgentSessions {
         if (
           this.live.get(key) !== live ||
           !live.process.running ||
-          (live.fingerprint !== this.options.fingerprint(key) &&
-            !live.process.busy)
+          this.stale(key, live, true)
         )
           continue;
       }
@@ -609,11 +608,7 @@ export class AgentSessions {
   reconfigure() {
     this.clearDiscovery();
     for (const [key, live] of this.live)
-      if (
-        live.fingerprint !== this.options.fingerprint(key) &&
-        !live.process.busy
-      )
-        this.drop(key, live);
+      if (this.stale(key, live)) this.drop(key, live);
   }
 
   async shutdown() {
@@ -692,16 +687,21 @@ export class AgentSessions {
   ): Promise<Live> {
     // Read before `launch` reads the settings, so it never describes newer ones.
     const fingerprint = this.options.fingerprint(key);
+    const sections = this.options.sections?.(key);
     const launch = await this.options.launch(key);
     const spawn = this.roomy(wanted);
     const process = resume
       ? await ClaudeProcess.start(spawn, { ...launch, resume })
       : await this.fresh(launch, spawn, spawned);
-    if (fingerprint === this.options.fingerprint(key) || this.disposed) {
+    if (
+      (fingerprint === this.options.fingerprint(key) &&
+        sections === this.options.sections?.(key)) ||
+      this.disposed
+    ) {
       if (resume) this.options.resumed?.(resume, launch.systemPrompt);
       else if (process.sessionId)
         this.options.started?.(process.sessionId, launch.systemPrompt, once);
-      return { process, fingerprint, used: this.now() };
+      return { process, fingerprint, sections, used: this.now() };
     }
     // Settings saved while it started: it would work with the old ones.
     void process.kill();
@@ -781,11 +781,7 @@ export class AgentSessions {
       } catch (error) {
         return { ok: false, error: message(error) };
       }
-      if (
-        live.fingerprint !== this.options.fingerprint(key) &&
-        !live.process.busy
-      )
-        this.drop(key, live);
+      if (this.stale(key, live)) this.drop(key, live);
     }
     return settled;
   }
@@ -830,6 +826,17 @@ export class AgentSessions {
       if (live.process.active) this.countdown(key, live);
       else if (this.live.get(key) === live) this.drop(key, live);
     }, IDLE_MS);
+  }
+  /** Whether the process runs on settings that changed, and can stop for
+   * them now: once no reply runs. For the sections only, a process with
+   * background work goes on, unless it is `delivering` a new turn. */
+  private stale(key: string, live: Live, delivering = false) {
+    if (live.process.busy) return false;
+    return (
+      live.fingerprint !== this.options.fingerprint(key) ||
+      (live.sections !== this.options.sections?.(key) &&
+        (delivering || !live.process.active))
+    );
   }
   private drop(key: string, live: Live) {
     clearTimeout(live.timer);
