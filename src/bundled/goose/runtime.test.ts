@@ -157,16 +157,23 @@ function setup(
     },
     channels: {
       list: () => ({
-        channels: [
-          {
-            id: channel,
-            name: "general",
-            channelType: options.solo?.has(channel) ? "solo" : "stream",
-            members: [],
-          },
-        ],
+        status: state.list,
+        channels:
+          state.list === "loading"
+            ? []
+            : [
+                {
+                  id: channel,
+                  name: "general",
+                  channelType: options.solo?.has(channel) ? "solo" : "stream",
+                  members: [],
+                },
+              ],
       }),
-      subscribeList: () => () => {},
+      subscribeList: (listener: () => void) => {
+        listListeners.add(listener);
+        return () => listListeners.delete(listener);
+      },
     },
     names: { resolve: (pubkey: string) => (pubkey === alice ? "Alice" : "") },
     profiles: {
@@ -191,8 +198,13 @@ function setup(
   };
   // A reconnect is a new session to the same community.
   let connected = session;
-  const state = { status: "ready", reconnecting: false };
+  const state = {
+    status: "ready",
+    reconnecting: false,
+    list: "ready" as "ready" | "loading",
+  };
   const listeners = new Set<() => void>();
+  const listListeners = new Set<() => void>();
   const relay = {
     snapshot: () => ({
       status: state.status,
@@ -300,6 +312,17 @@ function setup(
       state.status = "ready";
       state.reconnecting = false;
       for (const listener of [...listeners]) listener();
+    },
+    /** The community lists its channels again, until `listed`. */
+    listing: () => {
+      state.list = "loading";
+    },
+    /** How many wait for the channel list to change. */
+    listWaiting: () => listListeners.size,
+    /** The community has listed its channels. */
+    listed: () => {
+      state.list = "ready";
+      for (const listener of [...listListeners]) listener();
     },
   };
 }
@@ -1571,6 +1594,22 @@ describe("GooseRuntime", () => {
       await vi.waitFor(() => expect(listening()).toBe(1));
       expect(goose()).toBeUndefined();
       online();
+      await pending;
+      await vi.waitFor(() => expect(goose()?.turns).toHaveLength(1));
+      expect(goose()?.opened.map((session) => session.cwd)).toEqual([
+        "/repos/worktree",
+      ]);
+    });
+
+    it("answers a Solo chat once a connected community has listed its channels", async () => {
+      const { agentStore, deliver, goose, listing, listWaiting, listed } =
+        setup({ resolveDirectory: folders(), solo: new Set([channel]) });
+      await assign(agentStore, channel);
+      listing();
+      const pending = deliver(message("1", "@Gander hi"));
+      await vi.waitFor(() => expect(listWaiting()).toBe(1));
+      expect(goose()).toBeUndefined();
+      listed();
       await pending;
       await vi.waitFor(() => expect(goose()?.turns).toHaveLength(1));
       expect(goose()?.opened.map((session) => session.cwd)).toEqual([
