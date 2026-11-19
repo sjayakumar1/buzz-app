@@ -4,6 +4,8 @@
 }
 
 .icon {
+  /* Shared icon styles render block; this one sits in the sentence. */
+  display: inline-block;
   vertical-align: -2px;
   color: var(--text-standard);
 }
