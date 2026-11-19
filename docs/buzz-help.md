@@ -418,6 +418,9 @@ and are asked to sign in again in Buzz.
   without counting it as unread, and the pin button in the channel header
   opens the Pinned panel, which jumps to each pin. Deleting a message removes
   its pin; an edited pin shows the edit. Agents pin with the `pin` tool.
+  Forum posts and comments cannot be pinned from Buzz, and the Pinned panel
+  does not show them. A pin the relay refuses as too old is not sent again:
+  Buzz checks the pins once more, and you pin or unpin again if still needed.
 - Plugins can add actions to this toolbar. A link to an active plugin panel
   opens that panel in the conversation. If the plugin is removed, its actions
   and panel links become unavailable.
