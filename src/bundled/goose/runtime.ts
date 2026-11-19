@@ -90,13 +90,15 @@ import {
 import { readAuthorNames } from "../../features/agent-harness/author-names";
 import {
   ownerCanvas,
-  readProject,
+  project,
+  readCanvas,
   worksElsewhere,
 } from "../../features/agent-harness/project";
 import {
   placeOf,
   sectionsOf,
 } from "../../features/agent-harness/sections/compose";
+import type { SectionChoices } from "../../features/agent-harness/sections/choices";
 import {
   type GooseProcess,
   REQUEST_TIMEOUT_MS,
@@ -196,6 +198,9 @@ type Entry = {
   /** The folder each conversation's latest session started in, when a
    * plugin gave it one: its file reads use it while Buzz reconnects. */
   folders: Map<string, string>;
+  /** The section choices each conversation's session prompt was last built
+   * with: a message that steers its turn reads its Canvas with these. */
+  located: Map<string, SectionChoices | undefined>;
   policies: Map<
     string,
     {
@@ -590,23 +595,35 @@ export class GooseRuntime {
         current,
       );
       acceptProject = turn.acceptProject;
-      const { channel: where } = turn;
-      const text = turnPrompt({
-        ...turn,
-        agent: agent.key,
-        channelLevel: topLevel && !solo,
-        ...(wake ? { wake: { ...wake, text: wakePrompt ?? wake.text } } : {}),
-      });
+      const { steering, ...shown } = turn;
+      const { channel: where } = shown;
+      const woken = wake && {
+        wake: { ...wake, text: wakePrompt ?? wake.text },
+      };
+      const render = (project: string | undefined) => {
+        const text = turnPrompt({
+          ...shown,
+          ...(project ? { project } : {}),
+          agent: agent.key,
+          channelLevel: topLevel && !solo,
+          ...woken,
+        });
+        return resumed ? `${text}\n\n${RESUMED_PROMPT}` : text;
+      };
+      const text = render(shown.project);
       return {
-        key: turn.key,
-        dm: turn.channel.dm,
-        shown: turn.shown,
+        key: shown.key,
+        dm: where.dm,
+        shown: shown.shown,
         place: where.name
           ? `#${where.name}`
           : where.dm
             ? "DM"
             : where.id.slice(0, 8),
-        text: resumed ? `${text}\n\n${RESUMED_PROMPT}` : text,
+        text,
+        // A message that steers the running turn has its Canvas as that
+        // turn's prompt has the conversation's working location.
+        steer: steering === shown.project ? text : render(steering),
       };
     };
     const prepared =
@@ -663,9 +680,11 @@ export class GooseRuntime {
             ? undefined
             : (threadReference(event)?.rootId ?? event.id);
         notes = agent.notes?.(channel, noteRoot) ?? [];
+        const built =
+          wait && prepared ? await prompt(false, key, valid) : turn;
         const text = this.review(
           entry,
-          wait && prepared ? (await prompt(false, key, valid)).text : turn.text,
+          built.text,
           notes,
           channel,
           noteRoot,
@@ -687,20 +706,22 @@ export class GooseRuntime {
           ...(wake
             ? {
                 current,
-                refresh: async (fresh = false) => {
-                  const text = this.review(
+                refresh: async (fresh = false, steers = false) => {
+                  const built = await prompt(fresh, key, valid);
+                  return this.review(
                     entry,
-                    (await prompt(fresh, key, valid)).text,
+                    steers ? built.steer : built.text,
                     notes,
                     channel,
                     noteRoot,
                     key,
                   );
-                  return text;
                 },
               }
             : {}),
-          steer: steerPrompt(text),
+          steer: steerPrompt(
+            this.review(entry, built.steer, notes, channel, noteRoot, key),
+          ),
           fresh: async () =>
             this.review(
               entry,
@@ -1042,8 +1063,13 @@ export class GooseRuntime {
         : entry.sessions.seen(key);
     // Read alongside the conversation: only a Solo chat's Canvas is handed over.
     const owner = entry.handle?.owner;
+    // A Solo chat is one conversation.
+    const folder = session ? this.folder(agent.key, channelId) : undefined;
+    const now = entry.handle?.promptSections?.(channelId);
+    // The choices its running turn's prompt was built with, for a steer.
+    const running = entry.located.has(key) ? entry.located.get(key) : now;
     const reading = solo
-      ? readProject(
+      ? readCanvas(
           session && owner
             ? () =>
                 ownerCanvas(
@@ -1053,11 +1079,13 @@ export class GooseRuntime {
                   session.channelWrites.startingCanvas(channelId),
                 )
             : undefined,
-          worksElsewhere(
-            // A Solo chat is one conversation.
-            session ? this.folder(agent.key, channelId) : undefined,
-            entry.handle?.promptSections?.(channelId),
-          ),
+        ).then(
+          (read) =>
+            read && {
+              current: project(read.text, worksElsewhere(folder, now)),
+              steering: project(read.text, worksElsewhere(folder, running))
+                .section,
+            },
         )
       : Promise.resolve(undefined);
     const threadRead = (thread || (resumed && !dm)) && !topLevel;
@@ -1094,7 +1122,7 @@ export class GooseRuntime {
     );
     const reads = ownerReads(this.relay(agent.key), agent.pubkey);
     const signingAuthority = reads?.workflowAuthority();
-    const [names, loadedProject] = await Promise.all([
+    const [names, canvas] = await Promise.all([
       readAuthorNames(
         reads,
         [event, ...unseen.slice(-CONTEXT_LIMIT)],
@@ -1102,7 +1130,8 @@ export class GooseRuntime {
       ),
       reading,
     ]);
-    const project =
+    const loadedProject = canvas?.current;
+    const turnProject =
       scope === "community" && admitted && current()
         ? entry.project.preview(channelId, solo ? loadedProject : NO_PROJECT)
         : loadedProject;
@@ -1130,10 +1159,12 @@ export class GooseRuntime {
       total: earlier.length + 1,
       ...(signingAuthority ? { signingAuthority } : {}),
       names,
-      ...(project ? { project: project.section } : {}),
-      ...(scope === "community" && project
-        ? { acceptProject: () => entry.project.resolve(channelId, project) }
+      ...(turnProject ? { project: turnProject.section } : {}),
+      ...(scope === "community" && turnProject
+        ? { acceptProject: () => entry.project.resolve(channelId, turnProject) }
         : {}),
+      // Without a Canvas read, a steer keeps the turn's own project.
+      steering: canvas ? canvas.steering || undefined : turnProject?.section,
     };
   }
 
@@ -1160,6 +1191,7 @@ export class GooseRuntime {
       ),
       contexts: new Map(),
       folders: new Map(),
+      located: new Map(),
       policies: new Map(),
     };
     // Every session of the agent shares them, so they read the settings, the
@@ -1299,6 +1331,9 @@ export class GooseRuntime {
         const assigned = this.folder(agent, conversation);
         const { resolveDirectory } = this.desktop;
         if (conversation && assigned) entry.folders.set(conversation, assigned);
+        const sections = sectionsOf(entry.handle, conversation);
+        // What the conversation's session works by once it takes this prompt.
+        if (conversation) entry.located.set(conversation, sections);
         const cwd = assigned
           ? await existingFolder(resolveDirectory, assigned)
           : workspace;
@@ -1321,7 +1356,7 @@ export class GooseRuntime {
             ...(memory === undefined ? {} : { memory }),
             // A conversation's prompt has the sections of the plugin that
             // manages it.
-            sections: sectionsOf(entry.handle, conversation),
+            sections,
             place: placeOf(conversation),
           }),
         };
