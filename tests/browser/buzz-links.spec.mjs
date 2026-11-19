@@ -807,11 +807,19 @@ test.describe("links to channels the reader hasn't joined", () => {
         background: "rgba(0, 0, 0, 0)",
       });
     }
-    // Its preview still says why, and a click leaves the reader here.
+    // Its preview only says why: it is no second link to a destination that
+    // can't open, and a click leaves the reader here.
     await messageLinks[0].hover();
-    await expect(
-      page.getByLabel("Message preview", { exact: true }),
-    ).toContainText("aren’t a member");
+    const withheldCard = page.getByLabel("Message preview", { exact: true });
+    await expect(withheldCard).toContainText("aren’t a member");
+    await expect(withheldCard).toHaveAttribute("role", "tooltip");
+    await expect(withheldCard).not.toHaveAttribute("href", /./);
+    await expect(withheldCard).not.toHaveAttribute("tabindex", /./);
+    expect(
+      await withheldCard.evaluate(
+        (element) => getComputedStyle(element).cursor,
+      ),
+    ).not.toBe("pointer");
     // `aria-disabled` reads as not enabled, so the click is forced.
     for (const link of messageLinks) {
       await link.click({ force: true });

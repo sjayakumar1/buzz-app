@@ -398,9 +398,13 @@ export function MessageLink({
     const linked = root ? (
       <PreviewCard
         trigger={menuTrigger}
+        // A withheld destination's card only explains why; it isn't a link
+        // until a recheck admits the reader.
         {...(controls
           ? { actionRef: offeredAction }
-          : { link: <a href={url} {...navigation} /> })}
+          : withheld
+            ? {}
+            : { link: <a href={url} {...navigation} /> })}
         open={previewOpen && !!card && !menuOpen}
         onOpenChange={(next) => {
           if (next) lift.current = previewGap;

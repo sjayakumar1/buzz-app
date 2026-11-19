@@ -302,6 +302,42 @@ it("asks only once the list is ready, and never from a composer decoration", asy
   expect(screen.queryByText("Private channel")).toBeNull();
 });
 
+it("shows a withheld message link's card as an explanation, not a second link", async () => {
+  vi.useFakeTimers();
+  HTMLElement.prototype.showPopover = function () {
+    this.style.display = "block";
+  };
+  const t = fixture();
+  const url = `buzz://message?channel=secret&id=${"a".repeat(64)}`;
+  render(
+    <MessageLink
+      url={url}
+      label="the plan"
+      registry={undefined}
+      onOpenLink={() => true}
+      session={t.session}
+    >
+      the plan
+    </MessageLink>,
+  );
+  await act(async () => {});
+  t.answer("secret", { state: "withheld" });
+  const trigger = screen.getByRole("link", { name: "the plan" });
+  act(() => trigger.focus());
+  await act(() => vi.advanceTimersByTimeAsync(PREVIEW_REST_MS));
+  const card = screen.getByLabelText("Message preview");
+  expect(card.textContent).toContain("aren’t a member");
+  expect(card.getAttribute("role")).toBe("tooltip");
+  expect(card.getAttribute("href")).toBeNull();
+  expect(card.getAttribute("tabindex")).toBeNull();
+  expect(screen.getAllByRole("link")).toEqual([trigger]);
+  // Access restores the card's destination.
+  t.answer("secret", { ...crew, private: true, joined: true });
+  const restored = screen.getByLabelText("Message preview");
+  expect(restored.getAttribute("role")).toBe("link");
+  expect(restored.getAttribute("href")).toBe(url);
+});
+
 it("keeps a link focused while its name resolves, then opens its card", async () => {
   vi.useFakeTimers();
   HTMLElement.prototype.showPopover = function () {
