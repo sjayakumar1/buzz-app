@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { DetailTabContext, DetailTabSlot } from "./DetailTabContext";
+import { IntroSpotlight } from "./InlineThreadIntro";
 import { DialogBarMaterial } from "../../shared/design-system/ui/DialogBarMaterial";
 import { spring } from "motion";
 import {
@@ -312,6 +313,7 @@ export function DetailsSheet({
   headerActions,
   onClosed,
   onPromoted,
+  promoteSpotlight = false,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
@@ -332,6 +334,8 @@ export function DetailsSheet({
   headerActions?: ReactNode;
   onClosed?: () => void;
   onPromoted?: (() => void) | undefined;
+  /** Ring Open as tab while an intro points at it. */
+  promoteSpotlight?: boolean;
 }) {
   const { composer } = host;
   const promote = useContext(DetailTabContext);
@@ -508,34 +512,41 @@ export function DetailsSheet({
                 <div className="buzz-dialog-header-actions">
                   {headerActions}
                   {promote && (
-                    <IconButton
-                      aria-label="Open as tab"
-                      title="Open as tab"
-                      variant="glass"
-                      shape="round"
-                      size="compact"
-                      icon={<ArrowSquareOutIcon size={16} aria-hidden="true" />}
-                      onClick={() => {
-                        setPromoted(true);
-                        onPromoted?.();
-                        composer.dispatchEvent(
-                          new CustomEvent(COMPOSER_PROMOTED, { detail: tabId }),
-                        );
-                        releaseTab.current = promote({
-                          id: tabId,
-                          title: typeof title === "string" ? title : "Details",
-                          node: contentNode,
-                          close: () => {
-                            releaseTab.current?.();
-                            releaseTab.current = undefined;
-                            setPromoted(false);
-                            setMounted(false);
-                            onOpenChange(false);
-                            onClosed?.();
-                          },
-                        });
-                      }}
-                    />
+                    <IntroSpotlight active={promoteSpotlight}>
+                      <IconButton
+                        aria-label="Open as tab"
+                        title="Open as tab"
+                        variant="glass"
+                        shape="round"
+                        size="compact"
+                        icon={
+                          <ArrowSquareOutIcon size={16} aria-hidden="true" />
+                        }
+                        onClick={() => {
+                          setPromoted(true);
+                          onPromoted?.();
+                          composer.dispatchEvent(
+                            new CustomEvent(COMPOSER_PROMOTED, {
+                              detail: tabId,
+                            }),
+                          );
+                          releaseTab.current = promote({
+                            id: tabId,
+                            title:
+                              typeof title === "string" ? title : "Details",
+                            node: contentNode,
+                            close: () => {
+                              releaseTab.current?.();
+                              releaseTab.current = undefined;
+                              setPromoted(false);
+                              setMounted(false);
+                              onOpenChange(false);
+                              onClosed?.();
+                            },
+                          });
+                        }}
+                      />
+                    </IntroSpotlight>
                   )}
                   <BaseDialog.Close
                     render={

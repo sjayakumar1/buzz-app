@@ -51,6 +51,9 @@ export const test = base.extend({
   // Open threads in. Most journeys read threads in tabs; the app default,
   // inline, reads them in a sheet over the conversation.
   threadPlacement: ["side", { option: true }],
+  // Whether the first inline thread shows its one-time intro. Journeys read
+  // threads as a returning reader unless they ask for the intro.
+  threadIntro: [false, { option: true }],
   profilePicture: ["", { option: true }],
   // The viewer profile's `tz`. The empty opt-out keeps launch from sharing the
   // browser's zone into it; null leaves the key out so launch shares one.
@@ -155,6 +158,7 @@ export const test = base.extend({
       agentMessageDeletion,
       detailsMessage,
       threadPlacement,
+      threadIntro,
       profilePicture,
       profileTimeZone,
       readState,
@@ -2742,12 +2746,17 @@ export const test = base.extend({
           });
           observer.observe(document, { childList: true, subtree: true });
         });
-      await page.addInitScript((placement) => {
-        // Seed once, so a choice made during the journey survives reloads.
-        const key = "buzz-thread-placement.v1";
-        if (placement !== "inline" && !localStorage.getItem(key))
-          localStorage.setItem(key, placement);
-      }, threadPlacement);
+      await page.addInitScript(
+        ({ placement, intro }) => {
+          // Seed once, so a choice made during the journey survives reloads.
+          const key = "buzz-thread-placement.v1";
+          if (placement !== "inline" && !localStorage.getItem(key))
+            localStorage.setItem(key, placement);
+          if (!intro)
+            localStorage.setItem("buzz-inline-thread-intro.v1", "seen");
+        },
+        { placement: threadPlacement, intro: threadIntro },
+      );
       await page.addInitScript(
         ({
           viewer,

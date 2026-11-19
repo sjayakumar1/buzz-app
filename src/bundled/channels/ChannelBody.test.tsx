@@ -9,7 +9,11 @@ import {
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { registerOverlayComposer } from "../../features/messages/composer-overlay";
-import { setThreadPlacementPreference } from "../../features/messages/thread-preferences";
+import {
+  setThreadPlacementPreference,
+  threadPlacementPreference,
+} from "../../features/messages/thread-preferences";
+import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import { ChannelBody } from "./ChannelBody";
 
 const fixture = vi.hoisted(() => {
@@ -145,4 +149,48 @@ it("reads at the bottom even when a separate thread tab exists", () => {
   fireEvent.click(trigger);
   expect(openThread).not.toHaveBeenCalled();
   expect(screen.getByRole("textbox", { name: "Thread draft" })).toBeVisible();
+});
+
+it("introduces the first inline thread once, with its tab button and an inline off switch", async () => {
+  fixture.update("ready", [{ id: "root" }]);
+  const view = render(
+    <ToastProvider>
+      <div data-composer-host="">
+        <ChannelBody cached={false} onOpenThread={() => {}} />
+        <form
+          data-message-composer
+          ref={(node) => (node ? registerOverlayComposer(node) : undefined)}
+        />
+      </div>
+    </ToastProvider>,
+  );
+  const open = () => {
+    const trigger = screen.getByRole("button", { name: "Open reply" });
+    trigger.focus();
+    fireEvent.click(trigger);
+  };
+  open();
+  expect(
+    await screen.findByText("Threads now open right here"),
+  ).toBeInTheDocument();
+  const popOut = screen.getByRole("button", { name: "Open thread in tab" });
+  expect(popOut.parentElement).toHaveAttribute("data-active");
+
+  // Turning inline off applies to later threads; the tip stays to undo it.
+  fireEvent.click(screen.getByRole("switch", { name: "Open threads inline" }));
+  expect(threadPlacementPreference()).toBe("side");
+  fireEvent.click(screen.getByRole("switch", { name: "Open threads inline" }));
+  expect(threadPlacementPreference()).toBe("inline");
+
+  fireEvent.click(screen.getByRole("button", { name: "Got it" }));
+  await act(async () => {});
+  expect(screen.queryByText("Threads now open right here")).toBeNull();
+  expect(popOut.parentElement).not.toHaveAttribute("data-active");
+
+  fireEvent.click(screen.getByRole("button", { name: "Close thread" }));
+  open();
+  expect(screen.getByRole("dialog", { name: "Thread" })).toBeVisible();
+  await act(async () => {});
+  expect(screen.queryByText("Threads now open right here")).toBeNull();
+  view.unmount();
 });

@@ -1,0 +1,52 @@
+.details {
+  margin: 0;
+  color: var(--text-subtle);
+}
+
+.icon {
+  vertical-align: -2px;
+  color: var(--text-standard);
+}
+
+.actions {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.spotlight {
+  position: relative;
+  display: inline-flex;
+  border-radius: var(--radius-pill);
+}
+
+.spotlight[data-active]::after {
+  position: absolute;
+  inset: -3px;
+  border: 2px solid var(--border-accent);
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+  animation: intro-spotlight 1.6s var(--ease-state) infinite;
+}
+
+@keyframes intro-spotlight {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight[data-active]::after {
+    animation: none;
+  }
+}

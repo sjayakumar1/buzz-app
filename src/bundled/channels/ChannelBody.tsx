@@ -4,6 +4,12 @@ import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { MessageLoading } from "../../features/messages/MessageLoading";
 import { DetailsSheet } from "../../features/messages/DetailsSheet";
 import {
+  InlineThreadIntro,
+  IntroSpotlight,
+  inlineThreadIntroSeen,
+  markInlineThreadIntroSeen,
+} from "../../features/messages/InlineThreadIntro";
+import {
   overlayHostFor,
   type ComposerOverlayHost,
 } from "../../features/messages/composer-overlay";
@@ -93,6 +99,8 @@ export const ChannelBody = memo(function ChannelBody({
   };
   const sequence = useRef(0);
   const [threads, setThreads] = useState<Thread[]>([]);
+  // The inline thread that explains itself, until the reader is done with it.
+  const [introThread, setIntroThread] = useState<number>();
   const addThread = useCallback(
     (thread: Omit<Thread, "id" | "trigger" | "open">) => {
       const next = {
@@ -102,6 +110,7 @@ export const ChannelBody = memo(function ChannelBody({
         trigger: { current: trigger.current },
       };
       setThreads((items) => [...items.filter((item) => item.promoted), next]);
+      if (!inlineThreadIntroSeen()) setIntroThread(next.id);
     },
     [],
   );
@@ -260,22 +269,34 @@ export const ChannelBody = memo(function ChannelBody({
         historyControl={solo ? "scroll" : "button"}
       />
     );
+  const introducing = threads.some(
+    (thread) =>
+      thread.id === introThread &&
+      thread.open &&
+      !thread.promoted &&
+      thread.channelId === channelId,
+  );
   return (
     <>
       {timeline}
+      {presented && introducing && (
+        <InlineThreadIntro onDone={() => setIntroThread(undefined)} />
+      )}
       {presented &&
         threads
           .filter((thread) => thread.channelId === channelId)
           .map((thread) => (
             <DetailsSheet
               key={thread.id}
-              onPromoted={() =>
+              promoteSpotlight={introducing && thread.id === introThread}
+              onPromoted={() => {
+                if (thread.id === introThread) markInlineThreadIntroSeen();
                 setThreads((items) =>
                   items.map((item) =>
                     item.id === thread.id ? { ...item, promoted: true } : item,
                   ),
-                )
-              }
+                );
+              }}
               open={thread.open}
               onOpenChange={(open) =>
                 setThreads((items) =>
@@ -294,19 +315,25 @@ export const ChannelBody = memo(function ChannelBody({
               title="Thread"
               headerActions={
                 !tabHost && (
-                  <IconButton
-                    aria-label="Open thread in tab"
-                    variant="glass"
-                    shape="round"
-                    size="compact"
-                    icon={<ArrowSquareOutIcon size={16} aria-hidden="true" />}
-                    onClick={() => {
-                      onOpenThread?.(thread.messageId, thread.rootId);
-                      setThreads((items) =>
-                        items.filter((item) => item.id !== thread.id),
-                      );
-                    }}
-                  />
+                  <IntroSpotlight
+                    active={introducing && thread.id === introThread}
+                  >
+                    <IconButton
+                      aria-label="Open thread in tab"
+                      variant="glass"
+                      shape="round"
+                      size="compact"
+                      icon={<ArrowSquareOutIcon size={16} aria-hidden="true" />}
+                      onClick={() => {
+                        if (thread.id === introThread)
+                          markInlineThreadIntroSeen();
+                        onOpenThread?.(thread.messageId, thread.rootId);
+                        setThreads((items) =>
+                          items.filter((item) => item.id !== thread.id),
+                        );
+                      }}
+                    />
+                  </IntroSpotlight>
                 )
               }
               closeLabel="Close thread"
