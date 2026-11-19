@@ -31,6 +31,7 @@ import {
   keypair,
   message,
   metadata,
+  ownedProfile,
   profile,
   roster,
   scriptedTransport,
@@ -1495,6 +1496,81 @@ it("reranks message hits once the decision provider can answer, holding them onc
     view.rerender(<SearchResults {...props} query="deployed" />);
     await act(async () => vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS));
     expect(limits.slice(reads)).toEqual([20]);
+  } finally {
+    cleanup();
+    owner.dispose();
+  }
+});
+
+it("tells the reranker which hits agents wrote, whoever owns the agent", async () => {
+  vi.useFakeTimers();
+  const relay = keypair(),
+    viewer = keypair(),
+    colleague = keypair(),
+    colleagueAgent = keypair(),
+    envelopeAgent = keypair();
+  const discovery = [
+    metadata(relay, "crew", "crew"),
+    roster(relay, "crew", [viewer.pubkey, colleague.pubkey]),
+    profile(colleague, { name: "Colleague" }),
+    await ownedProfile(colleagueAgent, colleague, "Helper"),
+  ];
+  const owner = createRelaySession({
+    ...scriptedTransport(viewer.pubkey, relay.pubkey).transport,
+    query(filters) {
+      if (filters.some((filter) => filter.search !== undefined))
+        return Promise.resolve([
+          message(colleague, "crew", "deploy by a person", 1700000503),
+          message(colleagueAgent, "crew", "deploy by an agent", 1700000502),
+          signed(envelopeAgent, {
+            kind: 40002,
+            created_at: 1700000501,
+            content: JSON.stringify({ content: "deploy from an envelope" }),
+            tags: [["h", "crew"]],
+          }),
+        ]);
+      return Promise.resolve(
+        discovery.filter((event) =>
+          filters.some((filter) => matchFilter(filter as Filter, event)),
+        ),
+      );
+    },
+  });
+  const requests: DecisionRequest[] = [];
+  const decisions = {
+    status: () => "ready",
+    subscribe: () => () => {},
+    decide: async (request: DecisionRequest) => {
+      requests.push(request);
+      return { outcome: "failed", reason: "unavailable" };
+    },
+  } as unknown as Decisions;
+  render(
+    <SearchResults
+      session={owner.session}
+      query="deploy"
+      onQueryChange={() => {}}
+      input={createRef<HTMLInputElement>()}
+      pages={[]}
+      openConversation={() => {}}
+      openNewMessage={() => {}}
+      decisions={decisions}
+    />,
+  );
+  try {
+    await act(async () => vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS));
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    expect(requests).toHaveLength(1);
+    const { candidates } = JSON.parse(requests[0]?.state ?? "{}") as {
+      candidates: { text: string; from_agent?: true }[];
+    };
+    expect(
+      candidates.map(({ text, from_agent }) => [text, from_agent]),
+    ).toEqual([
+      ["deploy by a person", undefined],
+      ["deploy by an agent", true],
+      ["deploy from an envelope", true],
+    ]);
   } finally {
     cleanup();
     owner.dispose();

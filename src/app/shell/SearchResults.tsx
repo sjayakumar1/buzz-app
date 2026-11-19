@@ -1850,7 +1850,10 @@ export function SearchResults({
           message.channelId,
         ),
         mine: message.authorId === session.viewer,
+        // As message rows decide: whoever owns the agent, its profile or
+        // envelope says so; the viewer's own agents are known here too.
         agent:
+          !!message.agentEnvelope ||
           !!profiles.get(message.authorId)?.isAgent ||
           knownAgents.has(message.authorId),
         member:

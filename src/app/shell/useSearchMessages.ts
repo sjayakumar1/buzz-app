@@ -46,6 +46,8 @@ export type SearchMessage = Readonly<{
   workflowOwnerId?: string | undefined;
   /** The hit tags the viewer: it mentions them or replies to their message. */
   toViewer?: true;
+  /** Kind 40002: self-declared agent output, as message rows read it. */
+  agentEnvelope?: true;
   createdAt: number;
   preview: string;
   /** The searchable text, whitespace kept, for snippets and previews. */
@@ -128,6 +130,7 @@ async function readPage(
         )
           ? { toViewer: true as const }
           : {}),
+        ...(event.kind === 40002 ? { agentEnvelope: true as const } : {}),
         createdAt: event.created_at,
         preview: text.replace(/\s+/g, " ").trim().slice(0, 240) || "Attachment",
         text,
