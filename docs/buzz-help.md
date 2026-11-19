@@ -409,6 +409,14 @@ and are asked to sign in again in Buzz.
   the message. Links keep their own menu; uploaded images and videos have media
   actions. Other media and text you already selected keep the system menu.
   Touch long-press keeps text selection.
+- **Pin to channel** in a message's More menu adds it to the channel's shared
+  pin list, newest first, up to 250; **Unpin from channel** removes it. Anyone
+  who can post can pin or unpin any message; guests and archived channels
+  cannot. The option appears only where the community's relay supports pins.
+  Pinned messages show **Pinned**, the timeline notes "X pinned a message"
+  without counting it as unread, and the pin button in the channel header
+  opens the Pinned panel, which jumps to each pin. Deleting a message removes
+  its pin; an edited pin shows the edit. Agents pin with the `pin` tool.
 - Plugins can add actions to this toolbar. A link to an active plugin panel
   opens that panel in the conversation. If the plugin is removed, its actions
   and panel links become unavailable.

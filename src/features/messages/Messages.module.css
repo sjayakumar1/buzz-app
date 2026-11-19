@@ -4104,3 +4104,12 @@ html[data-keyboard-navigation] .activityExpansion {
   line-height: var(--text-caption--line-height);
   letter-spacing: var(--text-caption--letter-spacing);
 }
+
+.pinnedMarker {
+  composes: sentFromThread;
+}
+.pinnedMarker > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}

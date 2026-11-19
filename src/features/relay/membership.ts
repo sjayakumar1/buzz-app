@@ -31,6 +31,15 @@ export function membershipChange(
       target: body.actor,
     });
   }
+  if (body.type === "message_pinned")
+    return pubkey(body.target_event_id)
+      ? Object.freeze({
+          type: body.type,
+          actor: body.actor,
+          target: body.actor,
+          messageId: body.target_event_id,
+        })
+      : undefined;
   if (
     (body.type === "member_joined" || body.type === "member_removed") &&
     pubkey(body.target)

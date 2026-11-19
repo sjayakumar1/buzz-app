@@ -82,6 +82,7 @@ import {
   type Signer,
 } from "./transport";
 import { nativeSidebar } from "./native-sidebar";
+import { PIN_KIND, UNPIN_KIND } from "./pins";
 import { readApiFailure, type CommunityRefusal } from "./http-admission";
 
 async function nativeReadInvoke<T>(
@@ -465,6 +466,10 @@ export async function connectNativeTransport(
   const searchSort =
     Array.isArray(info.supported_extensions) &&
     info.supported_extensions.includes("buzz-search-sort");
+  // Pin and unpin commands; the relay keeps the pin list either way.
+  const pins =
+    Array.isArray(info.supported_extensions) &&
+    info.supported_extensions.includes("buzz-pins");
   const artifacts = info.artifacts as
     | { sync?: { version?: unknown } }
     | undefined;
@@ -1029,7 +1034,11 @@ export async function connectNativeTransport(
     },
     writer: {
       ...writer,
-      kinds: creation ? [...nativeWriteKinds, 9007] : nativeWriteKinds,
+      kinds: [
+        ...nativeWriteKinds,
+        ...(creation ? [9007] : []),
+        ...(pins ? [PIN_KIND, UNPIN_KIND] : []),
+      ],
       async publish(event, signal) {
         // The relay rejects old events before deduplication. An explicit retry
         // can confirm the original ID, but must never silently re-date it.

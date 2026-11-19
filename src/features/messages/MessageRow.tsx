@@ -112,7 +112,13 @@ import {
 } from "./MessageManagement";
 import { MessageActionBar } from "./MessageActionBar";
 import { useForwardMessage } from "./ForwardMessage";
-import { FlagIcon, ListBulletsIcon } from "../../shared/design-system/icons";
+import {
+  FlagIcon,
+  ListBulletsIcon,
+  PinIcon,
+} from "../../shared/design-system/icons";
+import { PIN_KIND } from "../relay/pins";
+import { usePinnedMessages } from "./use-pins";
 import {
   MenuIcon,
   MenuItem,
@@ -1633,6 +1639,9 @@ function MessageRowContent({
                   )}
               </div>
             </div>
+            {session?.outbox?.supports(PIN_KIND) &&
+              !row.membership &&
+              !row.huddle && <PinnedMarker session={session} row={row} />}
             {row.sentFromThread && (
               <div className={styles.sentFromThread}>
                 Sent from{" "}
@@ -2200,4 +2209,24 @@ function useThreadAgents(
       library?.identities.filter(({ pubkey }) => typers.includes(pubkey)) ?? [],
     waiting: state === "waiting",
   };
+}
+
+/** A quiet line on a message that is pinned in its channel. */
+function PinnedMarker({
+  session,
+  row,
+}: {
+  session: RelaySession;
+  row: ChannelMessage;
+}) {
+  const pins = usePinnedMessages(session, row.channelId);
+  if (!pins.set.has(row.id)) return null;
+  return (
+    <div className={styles.pinnedMarker}>
+      <span>
+        <PinIcon size={12} aria-hidden="true" />
+        Pinned
+      </span>
+    </div>
+  );
 }
