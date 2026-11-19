@@ -392,8 +392,8 @@ enum Stream {
 /// arguments. `env` adds variables (`null` removes one) to the app's own
 /// environment, less any Buzz identity: an agent's key never leaves the app.
 /// `secrets` names native-held secrets, each only for the processes it belongs
-/// to; a secret that is not saved is left unset. `agent-env`, the list saved
-/// for the local agent `env_agent`, is set before `env` so the harness's
+/// to; a secret that is not saved is left unset. `agent-env`, the device's list
+/// then the local agent `env_agent`'s, is set before `env` so the harness's
 /// variables win; the others are set after it.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
@@ -547,10 +547,14 @@ pub(crate) async fn plugin_host_process_spawn<R: tauri::Runtime>(
                     return Err("That agent can't have environment variables of its own".into());
                 }
                 app.state::<crate::agent_env::AgentEnvs>()
-                    .for_process(agent, &plugin, &declared.id, protected)
+                    .for_process(Some(agent), &plugin, &declared.id, protected)
                     .await
             }
-            None => Vec::new(),
+            None => {
+                app.state::<crate::agent_env::AgentEnvs>()
+                    .for_process(None, &plugin, &declared.id, protected)
+                    .await
+            }
         }
     } else {
         Vec::new()
