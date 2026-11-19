@@ -1560,6 +1560,10 @@ it.each(["peer", "own"] as const)(
       profiles: { subscribe: () => () => {}, event: () => undefined },
       read: async () => [],
       subscribeLive: () => () => {},
+      live: {
+        snapshot: () => ({ status: "connected", heads: [] }),
+        subscribe: () => () => {},
+      },
       outbox: {
         supports: () => true,
         subscribe: () => () => {},
@@ -2586,6 +2590,10 @@ it.each(["own", "other", "root", "pending", "archived", "read-only"])(
       outbox: { supports: () => true },
       read: async () => [],
       subscribeLive: () => () => {},
+      live: {
+        snapshot: () => ({ status: "connected", heads: [] }),
+        subscribe: () => () => {},
+      },
       unread: {
         subscribe: () => () => {},
         subscribeSync: () => () => {},

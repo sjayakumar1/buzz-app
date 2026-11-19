@@ -412,7 +412,8 @@ and are asked to sign in again in Buzz.
 - **Pin to channel** in a message's More menu adds it to the channel's shared
   pin list, newest first, up to 250; **Unpin from channel** removes it. Anyone
   who can post can pin or unpin any message; guests and archived channels
-  cannot. The option appears only where the community's relay supports pins.
+  cannot. The option appears only where the community's relay supports pins;
+  if pinning is turned off later, existing pins stay visible.
   Pinned messages show **Pinned**, the timeline notes "X pinned a message"
   without counting it as unread, and the pin button in the channel header
   opens the Pinned panel, which jumps to each pin. Deleting a message removes
