@@ -686,8 +686,7 @@ export class GooseRuntime {
             ? undefined
             : (threadReference(event)?.rootId ?? event.id);
         notes = agent.notes?.(channel, noteRoot) ?? [];
-        const built =
-          wait && prepared ? await prompt(false, key, valid) : turn;
+        const built = wait && prepared ? await prompt(false, key, valid) : turn;
         const text = this.review(
           entry,
           built.text,
@@ -1077,8 +1076,7 @@ export class GooseRuntime {
                 )
             : undefined,
         ).then(
-          (read) =>
-            read && project(read.text, worksElsewhere(folder, chosen)),
+          (read) => read && project(read.text, worksElsewhere(folder, chosen)),
         )
       : Promise.resolve(undefined);
     const threadRead = (thread || (resumed && !dm)) && !topLevel;
