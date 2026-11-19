@@ -758,6 +758,11 @@ function ThreadMessages({
     }
     return end;
   }, [tree, expanded]);
+  const collapsed =
+    presented &&
+    [...tree.children.keys()].some(
+      (id) => id !== undefined && !expanded.has(id),
+    );
   const resolveName = useChannelIdentityNames(session, channelId);
   const senderName = (row: ChannelMessage) => {
     const id = row.workflowOwnerId ?? row.authorId;
@@ -1198,9 +1203,10 @@ function ThreadMessages({
     !!display &&
     messageId !== resolvedRoot &&
     !display.rows.some((row) => row.id === messageId);
-  const revealSignal = targetHidden
-    ? undefined
-    : (inlineReveal ?? (positionedVisit ? undefined : navigation?.signal));
+  const requested =
+    inlineReveal ?? (positionedVisit ? undefined : navigation?.signal);
+  const revealSignal = targetHidden ? undefined : requested;
+  const withdrawnFor = useRef<AbortSignal>(undefined);
   const revealed = useMessageReveal({
     scroller,
     focus:
@@ -1451,7 +1457,20 @@ function ThreadMessages({
       revealed.current = navigation.signal;
       navigation.complete({ status: "opened" });
     }
-    if (navigation && targetHidden && revealed.current !== navigation.signal) {
+    if (
+      targetHidden &&
+      active &&
+      requested &&
+      revealed.current !== requested &&
+      withdrawnFor.current !== requested
+    ) {
+      withdrawnFor.current = requested;
+      arrangement?.withdraw();
+    } else if (
+      navigation &&
+      targetHidden &&
+      revealed.current !== navigation.signal
+    ) {
       revealed.current = navigation.signal;
       navigation.complete({ status: "opened" });
     }
@@ -1648,6 +1667,8 @@ function ThreadMessages({
     expanded,
     boundary,
     targetHidden,
+    requested,
+    arrangement,
   ]);
   // The effect above re-pins only when thread data changes. A growing composer
   // shrinks this viewport, late media grows rows and a join error grows the end
@@ -2173,7 +2194,7 @@ function ThreadMessages({
             : undefined
         }
         endMessageId={presented ? endRow : undefined}
-        partial={!!display && !display.complete}
+        partial={!!display && (!display.complete || collapsed)}
         controls={readerBar}
       />
       {arrangement && extensions?.accessories && (
