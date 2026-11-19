@@ -133,16 +133,17 @@ export function MessageLink({
   const parsed = internal ? parseBuzzLink(url) : null;
   const destination = parsed?.format === "legacy" ? parsed : undefined;
   const host = fullSession(session);
-  // Channel-only links name a channel the reader may not have joined. A
-  // composer decoration is the writer's own draft: it never looks one up.
+  // Any Buzz link names a channel the reader may not have joined. A composer
+  // decoration is the writer's own draft: it never looks one up.
+  const lookedUp = interactive ? destination?.channelId : undefined;
+  // Only a channel-only link presents the channel itself; a message or thread
+  // link keeps its own text and preview, and uses the answer only to stay
+  // inert while the channel is withheld.
   const referenced =
-    interactive &&
-    destination &&
-    !destination.messageId &&
-    !destination.threadRootId
-      ? destination.channelId
+    destination && !destination.messageId && !destination.threadRootId
+      ? lookedUp
       : undefined;
-  const reference = useChannelReference(host?.channels, referenced);
+  const reference = useChannelReference(host?.channels, lookedUp);
   // Subscribe to the session's presentation, including chosen-name provenance.
   // A string snapshot stays stable when unrelated channel activity changes.
   const channels = session?.channels;
@@ -160,12 +161,15 @@ export function MessageLink({
     },
     () => "",
   );
-  const named = namedChannel(reference);
+  const named = referenced ? namedChannel(reference) : undefined;
   const withheld = reference.state === "withheld";
+  const withheldChannel = withheld && !!referenced;
   const soloChat =
     !!chatName ||
-    (reference.state === "found" && reference.channelType === "solo");
-  const channelKind = withheld
+    (!!referenced &&
+      reference.state === "found" &&
+      reference.channelType === "solo");
+  const channelKind = withheldChannel
     ? "private"
     : soloChat
       ? "chat"
@@ -174,7 +178,8 @@ export function MessageLink({
         : "channel";
   // The authored label is message text, so it stays; the lock marks it. A raw
   // destination has no name to show.
-  const shown = withheld && label === undefined ? "Private channel" : children;
+  const shown =
+    withheldChannel && label === undefined ? "Private channel" : children;
   // A raw message destination names its author once read; a draft never reads.
   const byline = useLinkedMessageByline(
     interactive && label === undefined && children === undefined
@@ -185,7 +190,7 @@ export function MessageLink({
   );
   const display =
     label ??
-    (withheld
+    (withheldChannel
       ? "Private channel"
       : (byline ??
         (chatName || undefined) ??
@@ -295,12 +300,16 @@ export function MessageLink({
         ref={trigger}
         href={url}
         aria-label={accessibleName ?? display}
-        aria-description={description}
+        aria-description={
+          // A withheld message link has no title; its preview says why.
+          description ??
+          (withheld && !referenced ? previewFailures.withheld : undefined)
+        }
         aria-disabled={withheld || undefined}
         data-link-label={label ?? ""}
         data-panel-target={panelTarget ? url : undefined}
         title={
-          withheld
+          withheld && !preview
             ? previewFailures.withheld
             : !preview && !named
               ? url
@@ -421,8 +430,9 @@ export function MessageLink({
         <MenuPopup size="compact" anchor={menuAnchor} finalFocus={trigger}>
           {thread ? (
             <MenuItem
+              disabled={withheld}
               onClick={() => {
-                if (!active) return;
+                if (!active || withheld) return;
                 // The host records the focused link as the tab's return target.
                 if (trigger.current?.isConnected)
                   trigger.current.focus({ preventScroll: true });

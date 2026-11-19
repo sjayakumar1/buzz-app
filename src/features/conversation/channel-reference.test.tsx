@@ -11,6 +11,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { MessageLink } from "./MessageLink";
 import { apply as registerLinks } from "../../bundled/links";
 import type { LinkRenderer } from "./contracts";
+import { LinkThreadTabContext } from "./LinkLabelContext";
 import type { ChannelList, ChannelReference } from "../relay/contracts";
 import type { RelaySession } from "../relay/session";
 
@@ -199,6 +200,67 @@ it("does not open a withheld channel link, and keeps its href for copying", () =
   fireEvent(raw, new MouseEvent("auxclick", { bubbles: true, button: 1 }));
   expect(open).not.toHaveBeenCalled();
   expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("does not open a message or thread link into a withheld channel until access returns", async () => {
+  const t = fixture();
+  const open = vi.fn(() => true);
+  const openThreadTab = vi.fn(() => true);
+  const id = "a".repeat(64);
+  const root = "b".repeat(64);
+  const urls = [
+    `buzz://message?channel=secret&id=${id}`,
+    `buzz://message?channel=secret&id=${id}&thread=${root}`,
+  ];
+  render(
+    <LinkThreadTabContext value={openThreadTab}>
+      {urls.map((url, index) => (
+        <MessageLink
+          key={url}
+          url={url}
+          label={`link ${index}`}
+          registry={undefined}
+          onOpenLink={open}
+          session={t.session}
+        >
+          {`link ${index}`}
+        </MessageLink>
+      ))}
+    </LinkThreadTabContext>,
+  );
+  await act(async () => {});
+  // The channel is looked up for its access, even though it isn't shown.
+  expect(t.refer.mock.calls).toEqual([["secret"], ["secret"]]);
+  t.answer("secret", { state: "withheld" });
+  const links = screen.getAllByRole("link");
+  expect(links.map((element) => element.textContent)).toEqual([
+    "link 0",
+    "link 1",
+  ]);
+  for (const [index, element] of links.entries()) {
+    expect(element.getAttribute("aria-disabled")).toBe("true");
+    expect(element.getAttribute("href")).toBe(urls[index]);
+    fireEvent.click(element);
+    fireEvent(
+      element,
+      new MouseEvent("auxclick", { bubbles: true, button: 1 }),
+    );
+  }
+  fireEvent.contextMenu(screen.getByRole("link", { name: "link 0" }));
+  const item = await screen.findByRole("menuitem", { name: "Open link" });
+  expect(item.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(item);
+  expect(open).not.toHaveBeenCalled();
+  expect(openThreadTab).not.toHaveBeenCalled();
+  expect(screen.queryByRole("status")).toBeNull();
+  fireEvent.keyDown(item, { key: "Escape" });
+  // A recheck that admits the reader makes the links live without a reload.
+  t.answer("secret", { ...crew, private: true, joined: true });
+  for (const element of screen.getAllByRole("link")) {
+    expect(element.getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(element);
+  }
+  expect(open.mock.calls).toEqual([[urls[0]], [urls[1]]]);
 });
 
 it("keeps the authored label while the answer is unknown", async () => {
