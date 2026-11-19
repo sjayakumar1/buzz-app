@@ -540,10 +540,7 @@ test("session changes discard the previous sidebar targets and manual unread sti
     await openChannelDetails(page);
     await page.getByText("Diagnostics", { exact: true }).press("Enter");
     await page
-      .getByRole("button", {
-        name: "Mark as unread on this device",
-        exact: true,
-      })
+      .getByRole("button", { name: "Mark as unread", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Close Channel settings tab", exact: true })

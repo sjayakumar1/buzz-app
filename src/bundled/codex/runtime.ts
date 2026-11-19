@@ -66,6 +66,7 @@ import type { ChannelLabel } from "../../features/channels/channel-icon";
 import { appClient, readFile } from "../../buzz-mcp/app-client";
 import { readAuthorNames } from "../../features/agent-harness/author-names";
 import { readProject } from "../../features/agent-harness/project";
+import type { Facts } from "../../features/agent-harness/sections/index";
 import {
   referencedFolders,
   referencedSkills,
@@ -110,6 +111,7 @@ import {
   developerInstructions,
   rootOf,
   sessionName,
+  sessionPlace,
   turnContext,
   turnInput,
   type Conversation,
@@ -286,20 +288,23 @@ type Entry = {
 function addressed(
   args: Record<string, unknown>,
   answering: readonly Request[],
+  strict: boolean,
+  place: Place,
 ) {
   const id =
     typeof args.request === "string" ? args.request.trim().toLowerCase() : "";
   const named = id && answering.find((pending) => pending.event?.id === id);
   if (named) return named;
-  const { channel, reply } = args;
+  const channel =
+    typeof args.channel === "string" ? args.channel : place.channel;
   if (typeof channel !== "string") {
-    if (id)
+    if (id && strict)
       throw new Error(
         `Request ${id} is not part of this turn. Pass channel, and reply for a thread, to say where this goes.`,
       );
     return undefined;
   }
-  const scope = typeof reply === "string" ? reply : channel;
+  const scope = place.thread ?? channel;
   return (
     answering.find(
       (pending) =>
@@ -309,6 +314,40 @@ function addressed(
     answering.find((pending) => pending.unaddressed) ??
     null
   );
+}
+
+type Place = { channel?: string; thread?: string };
+
+/** Where a send's `reply` or `parent` posts: a reply to any message in a
+ * thread is in the thread, and a subthread in its parent's channel, as the
+ * tools post them. */
+async function placeOf(
+  agent: AgentHandle,
+  args: Record<string, unknown>,
+  answering: readonly Request[],
+): Promise<Place> {
+  const id = [args.reply, args.parent]
+    .find((id): id is string => typeof id === "string")
+    ?.trim()
+    .toLowerCase();
+  if (!id) return {};
+  // A reply to a request's own message, or in its thread, answers it there,
+  // a DM's at its top level included.
+  const known = answering.find(
+    ({ activityScope, event }) => activityScope === id || event?.id === id,
+  );
+  if (known)
+    return {
+      channel: known.conversation.channelId,
+      thread: known.activityScope,
+    };
+  const [event] = await agent.query([{ ids: [id], limit: 1 }]).catch(() => []);
+  if (!event) return { thread: id };
+  const channel = event.tags.find(([name]) => name === "h")?.[1];
+  return {
+    ...(channel ? { channel } : {}),
+    thread: threadReference(event)?.rootId ?? event.id,
+  };
 }
 
 /** The conversation's lane. A new community lane waits for every other lane. */
@@ -848,15 +887,16 @@ export class CodexRuntime {
       const server = this.open(this.handle(agent.key));
       const rpc = await server.opening;
       const settings = this.resolveConfig(agent.config);
+      const conversation = {
+        channelId: place.channelId,
+        ...(settings.scope === "channel" || !place.root
+          ? {}
+          : { root: place.root }),
+      };
       const { cwd: workspace, home } = await this.conversationPlace(
         reads.scope,
         agent.key,
-        {
-          channelId: place.channelId,
-          ...(settings.scope === "channel" || !place.root
-            ? {}
-            : { root: place.root }),
-        },
+        conversation,
         settings,
       );
       if (workspace !== thread.workspace)
@@ -873,6 +913,7 @@ export class CodexRuntime {
         {},
         undefined,
         home,
+        sessionPlace(conversation),
       );
       try {
         signal.throwIfAborted();
@@ -2311,15 +2352,13 @@ export class CodexRuntime {
               // differing pick waits for this turn and runs as the next one.
               // Messages after it join that turn instead: steering would run
               // them first. A turn keeps the posting policy it was admitted
-              // with, so a request under the other policy waits for it too. A
-              // turn the owner stopped takes nothing more.
+              // with, so a request in a Solo chat shared since, or the
+              // reverse, waits for it too. A turn the owner stopped takes
+              // nothing more.
               if (
                 active.finished ||
                 active.stopped ||
-                (!communityLane &&
-                  (current.queued ||
-                    request.conversation.topLevel !==
-                      active.reply.conversation.topLevel)) ||
+                (!communityLane && !request.solo !== !active.reply.solo) ||
                 (request.model && request.model !== active.model) ||
                 (request.effort && request.effort !== active.effort)
               ) {
@@ -2368,7 +2407,16 @@ export class CodexRuntime {
                   request.conversation.channelId,
                   request.solo ? request.canvas : NO_PROJECT,
                 );
-              active.reply = request;
+              // A wake steering in from elsewhere leaves unaddressed sends
+              // answering the turn's destination; a message moves them.
+              if (
+                communityLane ||
+                !request.wake ||
+                (request.conversation.channelId ===
+                  active.reply.conversation.channelId &&
+                  request.replyRoot === active.reply.replyRoot)
+              )
+                active.reply = request;
               active.requests.push(request);
               entry.waiting.delete(request);
               this.touch(request, entry, key);
@@ -2640,6 +2688,8 @@ export class CodexRuntime {
         workspace,
         {},
         delivery.synced,
+        undefined,
+        "standalone",
       );
       hookBridge = bridge;
       const text = await prompt();
@@ -2996,10 +3046,13 @@ export class CodexRuntime {
    * conversation gets `content`; another a community turn took in gets a
    * generic retry notice, so one conversation's details stay out of it. */
   private async publishOwed(active: Active, content: string) {
-    if (!active.reply.conversation.community)
-      return void (await this.publish(active.reply, content));
     const where = (taken: Request) =>
       `${taken.conversation.channelId}/${taken.replyRoot ?? ""}`;
+    if (
+      !active.reply.conversation.community &&
+      active.requests.every((taken) => where(taken) === where(active.reply))
+    )
+      return void (await this.publish(active.reply, content));
     const owed = new Map<string, Request>();
     for (const taken of active.requests)
       if (taken.finalDelivery !== true) owed.set(where(taken), taken);
@@ -3065,10 +3118,22 @@ export class CodexRuntime {
     const answering = active ? [...active.requests] : [];
     // Undefined uses the default destination; null is an explicit one that
     // answers no request in this turn.
+    const community = active?.reply.settings.scope === "community";
+    // Only a community turn or one spanning destinations picks a request by
+    // its routing arguments; elsewhere a request ID only attributes the send.
+    const spanning =
+      community ||
+      new Set(answering.map((taken) => taken.activityScope)).size > 1;
     const target =
-      active?.reply.settings.scope === "community" &&
+      active &&
+      spanning &&
       (call.tool === "send" || call.tool === "reply_in_subthread")
-        ? addressed(args, answering)
+        ? addressed(
+            args,
+            answering,
+            community,
+            await placeOf(active.reply.agent, args, answering),
+          )
         : undefined;
     const request = target ?? active?.reply;
     const owner = request ?? (once as Once);
@@ -3134,14 +3199,15 @@ export class CodexRuntime {
           }
         : {};
     const final = isFinalMessage(call.tool, args);
-    // A community turn answers each conversation with its own final send.
-    const settling = request?.conversation.community
-      ? target === null
-        ? []
-        : answering.filter(
-            (taken) => taken.activityScope === request.activityScope,
-          )
-      : answering;
+    // A turn spanning destinations answers each with its own final send.
+    const settling =
+      request?.conversation.community || spanning
+        ? target === null
+          ? []
+          : answering.filter(
+              (taken) => taken.activityScope === request?.activityScope,
+            )
+        : answering;
     const reply = await callSessionTool(
       this.target
         ? {
@@ -3375,6 +3441,8 @@ export class CodexRuntime {
     synced?: Delivery["synced"],
     /** The agent's workspace, when `workspace` is the conversation's folder. */
     home?: string,
+    /** What the thread is, for its Session Model. */
+    place?: Facts["place"],
   ) {
     const normalized = await rpc.request<{
       config: {
@@ -3416,7 +3484,12 @@ export class CodexRuntime {
     const params = {
       model,
       cwd: workspace,
-      developerInstructions: developerInstructions(agent, home),
+      developerInstructions: developerInstructions(
+        agent,
+        settings.scope,
+        home,
+        place,
+      ),
       approvalPolicy: "never",
       // Matches Claude's bypassPermissions; only the owner's mentions and the
       // agent's own watches and timers start work.
@@ -3473,6 +3546,7 @@ export class CodexRuntime {
       request,
       request.synced,
       home,
+      sessionPlace(request.conversation),
     );
     if (voiceInstructions) {
       Object.assign(params.config, {

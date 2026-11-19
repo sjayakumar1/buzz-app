@@ -41,6 +41,10 @@ import {
 import { imageType } from "../features/relay/attachment-limits";
 import { LIVE_CANVAS_BYTES } from "../features/channel-templates/model";
 import { threadReference } from "../features/relay/thread-reference";
+import {
+  editedTags,
+  readableTags,
+} from "../features/agent-harness/turn-records";
 import { parseBuzzLink } from "../features/navigation/buzz-links";
 import { soloChannelMetadata } from "../features/relay/discovery";
 import { channelLabelTags } from "../features/relay/channel-labels";
@@ -2632,7 +2636,8 @@ class Tools {
   }
 }
 
-/** A message's line in a read, omitting what `scope` names. */
+/** A message's line in a read, omitting what `scope` names, then its other
+ * tags. */
 function messageLine(
   event: BuzzEvent,
   name: string | undefined,
@@ -2642,6 +2647,14 @@ function messageLine(
   const owner = tag(event, "auth");
   const reference = threadReference(event);
   const thread = reference?.rootId;
+  // The rest, but for the thread references the line already names.
+  const named = [reference?.rootId, reference?.parentId];
+  const tags = readableTags(event.tags).filter(
+    ([name, value, , marker]) =>
+      name !== "e" ||
+      (marker !== "root" && marker !== "reply") ||
+      !named.includes(value?.toLowerCase()),
+  );
   return [
     event.id,
     `from ${event.pubkey}`,
@@ -2652,6 +2665,7 @@ function messageLine(
     reference &&
       reference.parentId !== thread &&
       `reply_to ${reference.parentId}`,
+    tags.length > 0 && `tags ${JSON.stringify(tags)}`,
     `at ${time(event.created_at)}: ${event.content}`,
   ]
     .filter(Boolean)
@@ -2668,7 +2682,10 @@ function rootOf(event: BuzzEvent) {
   return ((root && reply ? root : reply)?.[1] ?? event.id) as string;
 }
 
-/** Messages oldest first, each showing its author's latest edit. */
+/** Messages oldest first, each showing its author's latest edit, with the
+ * files it leaves (none when it clears them, as the relay serves; the
+ * timeline's `foldMessages` still shows the last files) and its custom
+ * emoji. */
 function edited(events: readonly BuzzEvent[]) {
   const messages = events.filter((event) => event.kind !== 40003);
   const byId = new Map(messages.map((event) => [event.id, event]));
@@ -2676,12 +2693,11 @@ function edited(events: readonly BuzzEvent[]) {
   for (const event of events)
     if (event.kind === 40003) {
       const target = tag(event, "e");
-      const message = target ? byId.get(target) : undefined;
       const last = target && edits.get(target);
       // Authorship first, so someone else's newer edit hides none.
       if (
         target &&
-        message?.pubkey === event.pubkey &&
+        byId.get(target)?.pubkey === event.pubkey &&
         (!last || last.created_at < event.created_at)
       )
         edits.set(target, event);
@@ -2689,7 +2705,18 @@ function edited(events: readonly BuzzEvent[]) {
   return messages
     .map((event) => {
       const edit = edits.get(event.id);
-      return edit ? { ...event, content: edit.content } : event;
+      return edit
+        ? {
+            ...event,
+            content: edit.content,
+            tags: editedTags(
+              event.tags,
+              edit.tags,
+              (edit.tags.some(([name]) => name === "emoji") ? edit : event)
+                .tags,
+            ),
+          }
+        : event;
     })
     .sort((a, b) => a.created_at - b.created_at);
 }

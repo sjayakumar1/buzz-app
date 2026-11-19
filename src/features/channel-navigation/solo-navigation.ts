@@ -427,6 +427,7 @@ export class SoloNavigationService extends Service implements SoloNavigation {
           binding
             ? [...this.runtimes.values()]
             : entries.map((source) => ({ source, failed: false })),
+          this.value.binding === binding ? this.value.regions : [],
           (label, title) => {
             const key = `solo-region-title:${label}`;
             const scope = connection.scope;

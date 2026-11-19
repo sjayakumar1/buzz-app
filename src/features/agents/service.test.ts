@@ -6053,6 +6053,7 @@ describe("an agent in several communities", () => {
         event: settingsFor("other/relay"),
       });
       const history = f.service.configHistory(bot);
+      expect(history?.settingsProblem).toContain("another harness");
       await expect(
         history?.revise("settings", {} as never),
       ).resolves.toMatchObject({
