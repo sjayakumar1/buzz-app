@@ -72,7 +72,12 @@ export function sidebarScrollAnchor(
     for (let y = Math.max(0, top + 1); y < bottom && anchors.length < 3; ) {
       const row = document
         .elementsFromPoint(x, y)
-        .map((hit) => hit.closest(rowSelector))
+        // A Solo link can cover just one part of its rendered row.
+        .map(
+          (hit) =>
+            hit.closest("[data-solo-destination-root]") ??
+            hit.closest(rowSelector),
+        )
         .find((hit) => hit && viewport.contains(hit));
       if (!row) {
         y += 8;
