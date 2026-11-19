@@ -421,6 +421,7 @@ and are asked to sign in again in Buzz.
   Forum posts and comments cannot be pinned from Buzz, and the Pinned panel
   does not show them. A pin the relay refuses as too old is not sent again:
   Buzz checks the pins once more, and you pin or unpin again if still needed.
+  A community that does not take pins refuses them, and Buzz says so.
 - Plugins can add actions to this toolbar. A link to an active plugin panel
   opens that panel in the conversation. If the plugin is removed, its actions
   and panel links become unavailable.
