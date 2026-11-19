@@ -1156,7 +1156,7 @@ it.each([true, false])(
       location: restored ? "conversation:owned" : "conversation:chat",
     });
     const visibleAtReveal: boolean[] = [];
-    function View() {
+    const View = () => {
       const sidebar = useSidebarView(h.scope, true, "conversation:owned");
       return (
         <ToastProvider>
@@ -1188,7 +1188,7 @@ it.each([true, false])(
           </nav>
         </ToastProvider>
       );
-    }
+    };
     render(<View />);
     const heading = screen.getByLabelText("Work");
     expect(heading.parentElement).not.toHaveAttribute("open");
