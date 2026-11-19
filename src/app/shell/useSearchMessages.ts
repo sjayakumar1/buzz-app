@@ -44,6 +44,8 @@ export type SearchMessage = Readonly<{
   channelId: string;
   authorId: string;
   workflowOwnerId?: string | undefined;
+  /** The hit tags the viewer: it mentions them or replies to their message. */
+  toViewer?: true;
   createdAt: number;
   preview: string;
   /** The searchable text, whitespace kept, for snippets and previews. */
@@ -121,6 +123,11 @@ async function readPage(
         channelId: hitChannelId,
         authorId: event.pubkey,
         workflowOwnerId: workflowOwner(event, session.workflowAuthority),
+        ...(event.tags.some(
+          ([name, value]) => name === "p" && value === session.viewer,
+        )
+          ? { toViewer: true as const }
+          : {}),
         createdAt: event.created_at,
         preview: text.replace(/\s+/g, " ").trim().slice(0, 240) || "Attachment",
         text,

@@ -1850,6 +1850,11 @@ export function SearchResults({
           message.channelId,
         ),
         mine: message.authorId === session.viewer,
+        agent:
+          !!profiles.get(message.authorId)?.isAgent ||
+          knownAgents.has(message.authorId),
+        member:
+          !!session.viewer && !!channel?.members?.includes(session.viewer),
       };
     },
     held: movedFor === query,

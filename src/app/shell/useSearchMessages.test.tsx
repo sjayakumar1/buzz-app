@@ -190,3 +190,63 @@ it.each([
     }
   },
 );
+
+it("marks hits that tag the viewer, as mentions and replies to them do", async () => {
+  const viewer = keypair();
+  const other = keypair();
+  const relay = keypair();
+  const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
+  const discovery = [
+    metadata(relay, "crew", "crew"),
+    roster(relay, "crew", [viewer.pubkey, other.pubkey]),
+  ];
+  const owner = createRelaySession({
+    ...wire.transport,
+    query(filters, signal) {
+      if (filters.some((filter) => filter.kinds?.includes(9)))
+        return wire.transport.query(filters, signal);
+      return Promise.resolve(
+        discovery.filter((event) =>
+          filters.some((filter) => filter.kinds?.includes(event.kind)),
+        ),
+      );
+    },
+  });
+  try {
+    owner.session.channels.ensureList();
+    await waitFor(() =>
+      expect(owner.session.channels.get?.("crew")).toBeDefined(),
+    );
+    const { result } = renderHook(() =>
+      useSearchMessages(owner.session, "deploy"),
+    );
+    await waitFor(() => expect(wire.pending).toHaveLength(1));
+    await act(async () =>
+      wire
+        .next()
+        .respond([
+          message(other, "crew", "deploy tagged", 1700000002, [
+            ["p", viewer.pubkey],
+          ]),
+          message(other, "crew", "deploy other", 1700000001, [
+            ["p", other.pubkey],
+          ]),
+          message(other, "crew", "deploy untagged", 1700000000),
+        ]),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(
+      result.current.messages.map(({ preview, toViewer }) => [
+        preview,
+        toViewer,
+      ]),
+    ).toEqual([
+      ["deploy tagged", true],
+      ["deploy other", undefined],
+      ["deploy untagged", undefined],
+    ]);
+  } finally {
+    cleanup();
+    owner.dispose();
+  }
+});
