@@ -84,6 +84,7 @@ export function RemindDialog({
   return (
     <Dialog
       size="compact"
+      bodyLayout={message ? "flow" : "scroll"}
       open
       dismissOnOutsideClick={false}
       onOpenChange={(open) => !open && close()}
