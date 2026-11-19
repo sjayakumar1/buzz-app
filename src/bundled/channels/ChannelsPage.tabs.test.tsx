@@ -282,6 +282,7 @@ async function page(
 }
 
 it("passes only the visible side thread's root to the timeline and clears it when hidden or moved", async () => {
+  setThreadPlacementPreference("side");
   const h = await page("stream", undefined, true);
   await screen.findByRole("tab", { name: "Initiating thread" });
   const tabs = renderHook(() => useChannelTabState(h.session, "alpha"));
