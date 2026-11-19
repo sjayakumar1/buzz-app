@@ -355,9 +355,9 @@ appTest.describe("sidebar refresh", () => {
       await page.evaluate(async (ids) => {
         for (const id of ids) await window.fixtureSoloRegion.classify(id);
       }, soloChannels);
-      const rows = viewport.locator(
-        '[data-sidebar-section^="solo-region:"] [data-solo-destination-id]',
-      );
+      const rowSelector =
+        '[data-sidebar-section^="solo-region:"] [data-solo-destination-id]';
+      const rows = viewport.locator(rowSelector);
       await expect(rows).toHaveCount(soloChannels.length);
       const anchor = rows.nth(6);
       const anchorId = await anchor.getAttribute("data-solo-destination-id");
@@ -389,18 +389,6 @@ appTest.describe("sidebar refresh", () => {
         await viewport.evaluate((port) => port.clientHeight),
       );
 
-      await page.evaluate(
-        (id) => window.fixtureSoloRegion.present([], [], id),
-        promotedId,
-      );
-      await expect(rows.first()).toHaveAttribute(
-        "data-solo-destination-id",
-        promotedId,
-      );
-      await expect.poll(() => position()).toBe(before);
-
-      // Move the first visible row and remove a row further down in the same
-      // refresh. The remaining visible neighbor should keep its place.
       const order = await rows.evaluateAll((elements) =>
         elements.map((element) => element.dataset.soloDestinationId),
       );
@@ -408,11 +396,30 @@ appTest.describe("sidebar refresh", () => {
       const neighbor = order[index + 1];
       const removed = order[index + 2];
       const neighborBefore = await position(neighbor);
-      await page.evaluate(
-        ({ removed, anchorId }) =>
-          window.fixtureSoloRegion.present([removed], [], anchorId),
-        { removed, anchorId },
+      const afterFirst = await viewport.evaluate(
+        (port, { rowSelector, promotedId, removed, anchorId }) =>
+          new Promise((resolve) => {
+            const observer = new MutationObserver(() => {
+              const rows = port.querySelectorAll(rowSelector);
+              if (rows[0]?.dataset.soloDestinationId !== promotedId) return;
+              observer.disconnect();
+              const anchor = [...rows].find(
+                (row) => row.dataset.soloDestinationId === anchorId,
+              );
+              resolve(
+                anchor.getBoundingClientRect().top -
+                  port.getBoundingClientRect().top,
+              );
+              // Publish again before the browser dispatches the scroll event
+              // for the first correction. Keep the surviving neighbor in place.
+              window.fixtureSoloRegion.present([removed], [], anchorId);
+            });
+            observer.observe(port, { childList: true, subtree: true });
+            window.fixtureSoloRegion.present([], [], promotedId);
+          }),
+        { rowSelector, promotedId, removed, anchorId },
       );
+      expect(afterFirst).toBe(before);
       await expect(rows.first()).toHaveAttribute(
         "data-solo-destination-id",
         anchorId,
@@ -423,25 +430,26 @@ appTest.describe("sidebar refresh", () => {
       const focusOrder = await rows.evaluateAll((elements) =>
         elements.map((element) => element.dataset.soloDestinationId),
       );
-      const next = focusOrder[focusOrder.indexOf(neighbor) + 1];
+      const focusedId = focusOrder[3];
+      const next = focusOrder[4];
       await viewport.evaluate(
         async (port, offset) => {
-          port.scrollTop += offset - 12;
+          port.scrollTop += offset;
           await new Promise((resolve) =>
             requestAnimationFrame(() => requestAnimationFrame(resolve)),
           );
         },
-        await position(neighbor),
+        await position(focusOrder[0]),
       );
       const focused = rows.and(
-        page.locator(`[data-solo-destination-id="${neighbor}"]`),
+        page.locator(`[data-solo-destination-id="${focusedId}"]`),
       );
       await focused.evaluate((row) => row.focus({ preventScroll: true }));
       await expect(focused).toBeFocused();
       await page.evaluate(
-        ({ removed, neighbor, next }) =>
-          window.fixtureSoloRegion.present([removed, neighbor], [], next),
-        { removed, neighbor, next },
+        ({ removed, focusedId, next }) =>
+          window.fixtureSoloRegion.present([removed, focusedId], [], next),
+        { removed, focusedId, next },
       );
       await expect(rows.first()).toHaveAttribute(
         "data-solo-destination-id",

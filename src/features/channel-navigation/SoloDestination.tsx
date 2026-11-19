@@ -523,7 +523,7 @@ function useDestinationFocus(
         ...rows.slice(index + 1),
         ...rows.slice(0, index).reverse(),
       ];
-      queueMicrotask(() => {
+      const restoreFocus = () => {
         if (document.activeElement !== document.body) return;
         const candidates = [
           ...ids.map(
@@ -565,7 +565,10 @@ function useDestinationFocus(
           candidate.focus();
           if (document.activeElement === candidate) break;
         }
-      });
+      };
+      // Cleanup can queue focus recovery before the rest of the commit mutates
+      // the sidebar. Let its mutation observer correct the viewport first.
+      queueMicrotask(() => queueMicrotask(restoreFocus));
     };
   }, [root, channelId, visible]);
   return {
