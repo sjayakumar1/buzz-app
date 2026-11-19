@@ -974,9 +974,14 @@ function ThreadMessages({
     opening?: object | undefined;
     id?: string | null;
     failed?: true;
+    shown?: string | null;
   }>(() => ({ opening }));
-  if (opening && opening !== boundary.opening) setBoundary({ opening });
+  // A route can arrive after its opening already showed a line; keep that line
+  // on screen until the new decision replaces it, rather than blinking it out.
+  if (opening && opening !== boundary.opening)
+    setBoundary({ opening, shown: boundary.id ?? boundary.shown });
   const unreadBoundary = boundary.id;
+  const shownBoundary = unreadBoundary ?? boundary.shown;
   const placed = useRef<typeof boundary>(undefined);
   // Focus as this panel opened, and whether pointer or keyboard input has
   // come since: either way the person owns focus now.
@@ -1859,7 +1864,7 @@ function ThreadMessages({
           className={styles.replyItem}
           data-layout={continuation ? "continuation" : "thread"}
         >
-          {!parent && row.id === unreadBoundary && (
+          {!parent && row.id === shownBoundary && (
             <div className={styles.newMessages} data-new-messages-boundary>
               <hr className="sr-only select-none" aria-label="New messages" />
               <span className="select-none" aria-hidden="true">
