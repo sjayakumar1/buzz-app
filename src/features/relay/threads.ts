@@ -37,6 +37,8 @@ const compare = (a: ThreadCursor, b: ThreadCursor) =>
 export type ThreadSnapshot = Readonly<{
   status: "idle" | "loading" | "ready" | "error";
   root: ChannelMessage | undefined;
+  /** The live reader returned the root independently of any seeded row. */
+  rootVerified?: true | undefined;
   replies: readonly ChannelMessage[];
   error: string | undefined;
   /** Continuation is possible, not a claim about total thread size or exhaustion. */
@@ -192,6 +194,7 @@ export function createThreadView({
   const unadmitted = exact;
   let disposed = false;
   let rootId: string | undefined;
+  let verifiedRootId: string | undefined;
   let rootUnavailable = false;
   let targetStatus: ThreadSnapshot["targetStatus"] = exact
     ? "loading"
@@ -418,6 +421,8 @@ export function createThreadView({
       ...snapshot,
       ...patch,
       root: nextRoot,
+      rootVerified:
+        nextRoot && nextRoot.id === verifiedRootId ? true : undefined,
       replies,
       resumed: shown ? true : undefined,
       ...(exact ? { target, targetStatus } : {}),
@@ -808,7 +813,10 @@ export function createThreadView({
           publish({ canLoadMore: false });
           throw new Error("The original thread message is unavailable.");
         }
+        const firstProof = verifiedRootId !== rootId;
+        verifiedRootId = rootId;
         if (!retain(union(remote, related(root)))) return;
+        if (firstProof) publish();
       }
       // A strict refresh re-reads from the newest end. Live replay covers
       // minutes, not a long disconnect, so keep paging until a reply kept
@@ -896,6 +904,7 @@ export function createThreadView({
           publish({ canLoadMore: false });
           throw new Error("The original thread message is unavailable.");
         }
+        verifiedRootId = rootId;
         // Count traversal rows before presentation filtering. The bridge may return
         // other content kinds, and appended auxiliaries do not consume its page limit.
         const replies = events.filter(isReply).sort(compare);

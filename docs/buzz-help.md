@@ -756,6 +756,8 @@ and are asked to sign in again in Buzz.
   been deleted; or the preview couldn't load. Links don't record their
   community, so one from another community looks like a private or missing
   channel. The card still opens the link.
+- **Message links** open the message in Channels by default. An enabled plugin
+  can open a message it recognizes in its own page after Buzz checks access.
 - **Manage members** shows **General** access first in the member list. **Public**
   lets people in the community read and new people participate; **View only**
   lets them read; **Private** limits access to people added to the channel.
