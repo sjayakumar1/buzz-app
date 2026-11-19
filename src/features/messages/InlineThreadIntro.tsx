@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ArrowRightIcon } from "../../shared/design-system/icons";
 import { Button } from "../../shared/design-system/ui/Button";
 import {
@@ -78,6 +78,8 @@ export function InlineThreadIntro({
         anchor={anchor}
         side="bottom"
         align={step === 1 ? "start" : "end"}
+        // Each step stays below what it points at, rather than flipping.
+        collisionAvoidance={{ side: "none", align: "shift" }}
         initialFocus={false}
         finalFocus={false}
         data-inline-thread-intro={step}
@@ -132,7 +134,8 @@ export function InlineThreadIntro({
   );
 }
 
-/** Marks the control an intro step points at, and gives the step its anchor. */
+/** Marks the control an intro step points at, and gives the step its anchor
+ * once the sheet around it has settled, so the step opens where it stays. */
 export function IntroSpotlight({
   active,
   shape,
@@ -145,9 +148,26 @@ export function IntroSpotlight({
   anchorRef?: ((element: HTMLElement | null) => void) | undefined;
   children: ReactNode;
 }) {
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!active || !element || !anchorRef) return;
+    let current = true;
+    const sheet = element.closest("[data-details-sheet-surface]");
+    void Promise.all(
+      (sheet?.getAnimations?.() ?? []).map((animation) =>
+        animation.finished.catch(() => {}),
+      ),
+    ).then(() => {
+      if (current) anchorRef(element);
+    });
+    return () => {
+      current = false;
+      anchorRef(null);
+    };
+  }, [active, element, anchorRef]);
   return (
     <span
-      ref={active ? anchorRef : undefined}
+      ref={setElement}
       className={styles.spotlight}
       data-shape={shape}
       data-active={active || undefined}
