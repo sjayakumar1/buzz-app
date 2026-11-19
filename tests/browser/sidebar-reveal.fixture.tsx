@@ -6,6 +6,7 @@ import { SidebarSection } from "../../src/bundled/channels/SidebarSection";
 import { SidebarUnread } from "../../src/bundled/channels/SidebarUnread";
 import { SidebarContributionSection } from "../../src/features/channel-navigation/SidebarContributionSection";
 import { ChannelSidebarDnd } from "../../src/features/channel-navigation/ChannelSidebarDnd";
+import { ChannelSidebarRows } from "../../src/features/channel-navigation/ChannelSidebarRows";
 import type { Navigation } from "../../src/features/navigation/controller";
 import type { OpenTarget } from "../../src/features/navigation/targets";
 import type {
@@ -23,6 +24,7 @@ type State = {
   rows: number[];
   relocated?: boolean;
   anchored?: boolean | undefined;
+  animated?: boolean | undefined;
 };
 const rows = (count: number) => Array.from({ length: count }, (_, i) => i);
 const contributionTarget: OpenTarget = {
@@ -74,25 +76,30 @@ declare global {
   }
 }
 
-function Sidebar({ at, rows, anchored }: Omit<State, "mounted">) {
+function Sidebar({ at, rows, anchored, animated }: Omit<State, "mounted">) {
   const view = useSidebarView("fixture", true, at);
   const target =
     at === "conversation:late"
       ? contributionTarget
       : ({ version: 1, kind: "home" } satisfies OpenTarget);
+  const entries = rows.map((id) => (
+    <div
+      key={id}
+      data-row={id}
+      data-variant="row"
+      aria-current={at === `row:${id}` ? "page" : undefined}
+      style={{ height: 40 }}
+    >
+      Row {id}
+    </div>
+  ));
   const content = (
     <>
-      {rows.map((id) => (
-        <div
-          key={id}
-          data-row={id}
-          data-variant="row"
-          aria-current={at === `row:${id}` ? "page" : undefined}
-          style={{ height: 40 }}
-        >
-          Row {id}
-        </div>
-      ))}
+      {animated ? (
+        <ChannelSidebarRows open>{entries}</ChannelSidebarRows>
+      ) : (
+        entries
+      )}
       <ChannelSidebarDnd
         writable={false}
         onMove={() => {}}
@@ -191,7 +198,12 @@ function Harness() {
       </nav>
     );
   return state.mounted ? (
-    <Sidebar at={state.at} rows={state.rows} anchored={state.anchored} />
+    <Sidebar
+      at={state.at}
+      rows={state.rows}
+      anchored={state.anchored}
+      animated={state.animated}
+    />
   ) : null;
 }
 

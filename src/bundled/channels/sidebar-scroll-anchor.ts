@@ -1,5 +1,14 @@
 const rowSelector = '[data-variant="row"], summary, [data-solo-disclosure]';
 
+function layoutTop(row: Element, rect: DOMRect) {
+  const slide = row.closest("[data-moving]");
+  if (!slide) return rect.top;
+  // Team rows animate a vertical translation over their new layout slots.
+  return (
+    rect.top - new DOMMatrixReadOnly(getComputedStyle(slide).transform).m42
+  );
+}
+
 /**
  * Native anchoring can lose its anchor during a keyed reorder or follow the
  * focused row as it moves. Keep a small sample of the rows the user is reading.
@@ -70,8 +79,9 @@ export function sidebarScrollAnchor(
         continue;
       }
       const rect = row.getBoundingClientRect();
-      if (rect.top >= top && rect.bottom <= bottom)
-        anchors.push({ row, offset: rect.top - top });
+      const offset = layoutTop(row, rect) - top;
+      if (offset >= 0 && offset + rect.height <= bottom - top)
+        anchors.push({ row, offset });
       y = Math.max(y + 1, rect.bottom + 1);
     }
   }
@@ -83,11 +93,27 @@ export function sidebarScrollAnchor(
     const userInput = inputFrame || pointerDown;
     if (anchors.length && (current === scrollTop || !userInput)) {
       const top = viewport.getBoundingClientRect().top;
-      const shifts = anchors.flatMap(({ row, offset }) => {
+      const bottom = top + viewport.clientHeight;
+      const positions = anchors.flatMap(({ row, offset }) => {
         if (!viewport.contains(row)) return [];
         const rect = row.getBoundingClientRect();
-        return rect.height ? [rect.top - top - offset] : [];
+        const rowTop = layoutTop(row, rect);
+        return rect.height
+          ? [
+              {
+                shift: rowTop - top - offset,
+                outside: rowTop + rect.height <= top || rowTop >= bottom,
+              },
+            ]
+          : [];
       });
+      // A single surviving sample far from view may have been promoted. Keep
+      // the current scroll offset and sample the rows that remain nearby.
+      if (positions.length === 1 && positions[0]?.outside) {
+        capture();
+        return;
+      }
+      const shifts = positions.map(({ shift }) => shift);
       if (
         current === scrollTop &&
         shifts.length === anchors.length &&

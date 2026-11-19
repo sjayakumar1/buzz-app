@@ -228,6 +228,87 @@ test("a delayed reveal that lands in place takes precedence over the old anchor"
   expect(errors).toEqual([]);
 });
 
+test("a refresh does not follow the only sampled row when it leaves view", async ({
+  page,
+}) => {
+  await open(page);
+  await update(page, { mounted: true, anchored: true });
+  const sidebar = page.getByRole("navigation", { name: "Subscribed channels" });
+  const nearby = sidebar.locator('[data-row="7"]');
+  await expect(nearby).toBeAttached();
+  const before = await sidebar.evaluate((viewport) => {
+    viewport.scrollTop = 160;
+    return viewport.scrollTop;
+  });
+  await settle(page);
+  await expect(nearby).toBeInViewport({ ratio: 1 });
+
+  await page.evaluate(() => {
+    const rows = window.sidebar.rows(50);
+    rows.splice(4, 3);
+    window.sidebar.update({ rows: [6, ...rows] });
+  });
+  await expect(sidebar.locator("[data-row]").first()).toHaveText("Row 6");
+  await settle(page);
+  expect(await sidebar.evaluate((viewport) => viewport.scrollTop)).toBe(before);
+  await expect(nearby).toBeInViewport({ ratio: 1 });
+});
+
+test("a wheel scroll during a row slide stays put when the slide ends", async ({
+  page,
+}) => {
+  await open(page);
+  await update(page, { mounted: true, anchored: true, animated: true });
+  const sidebar = page.getByRole("navigation", { name: "Subscribed channels" });
+  await expect(sidebar.locator('[data-row="4"]')).toBeAttached();
+  const initial = await sidebar.evaluate((viewport) => {
+    viewport.scrollTop = 160;
+    return viewport.scrollTop;
+  });
+  await settle(page);
+  await sidebar.evaluate((viewport) => {
+    const observer = new MutationObserver(() => {
+      const moving = [...viewport.querySelectorAll("[data-moving]")];
+      if (!moving.length) return;
+      observer.disconnect();
+      for (const row of moving) {
+        for (const slide of row.getAnimations()) {
+          slide.pause();
+          slide.currentTime = 20;
+        }
+      }
+    });
+    observer.observe(viewport, {
+      subtree: true,
+      attributeFilter: ["data-moving"],
+    });
+    const rows = window.sidebar.rows(50);
+    rows.splice(4, 6, 6, 4, 5, 9, 7, 8);
+    window.sidebar.update({ rows });
+  });
+  const moving = sidebar.locator("[data-moving]");
+  await expect(moving).toHaveCount(6);
+  await sidebar.hover();
+  const preWheel = await sidebar.evaluate((viewport) => viewport.scrollTop);
+  await page.mouse.wheel(0, 16);
+  await expect
+    .poll(() => sidebar.evaluate((viewport) => viewport.scrollTop))
+    .toBe(preWheel + 16);
+  await settle(page);
+  const afterWheel = await sidebar.evaluate((viewport) => {
+    for (const row of viewport.querySelectorAll("[data-moving]")) {
+      for (const slide of row.getAnimations()) slide.finish();
+    }
+    return viewport.scrollTop;
+  });
+  expect(initial).toBeGreaterThan(0);
+  await expect(moving).toHaveCount(0);
+  await settle(page);
+  expect(await sidebar.evaluate((viewport) => viewport.scrollTop)).toBe(
+    afterWheel,
+  );
+});
+
 test("a user scroll before contributed rows arrive cancels their reveal", async ({
   page,
 }) => {
