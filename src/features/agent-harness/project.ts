@@ -81,7 +81,7 @@ export function project(
     ? ""
     : elsewhere
       ? ` These folders hold code that is relevant to this chat: ${list}.${ownerWrote && ownerWorktreeRules(content) ? "" : " They are for reading."}`
-      : ` This chat's work happens in these folders, not your own workspace: ${list}. To change files there, follow this Canvas's rule for them; your workspace keeps your notes.`;
+      : ` This chat's work happens in these folders, not your own workspace: ${list}. To change files there, follow this Canvas's rule for them, or your working location rule when it gives none; your workspace keeps your notes.`;
   const standing = ownerWrote
     ? "which your owner wrote: their standing instructions for this chat, which your owner's messages override"
     : "which an agent wrote: standing instructions for this chat, which your owner's messages and your base instructions override";
