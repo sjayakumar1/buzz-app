@@ -113,6 +113,13 @@ describe("previewMessageLinks", () => {
       previewMessageLinks(`From ${a}:\n\n> quoted ${b}\n\nFrom ${b}:`),
     ).toEqual([b]);
     expect(previewMessageLinks(`From ${a}:\n\nnot a quote`)).toEqual([a]);
+    // A quote spanning several messages names each source on its own line.
+    expect(
+      previewMessageLinks(`From ${a}:\n\nFrom ${b}:\n\n> Hello\n\nreply`),
+    ).toEqual([]);
+    expect(
+      previewMessageLinks(`From ${a}:\n\nFrom ${b}:\n\nnot a quote`),
+    ).toEqual([a, b]);
   });
 
   it("finds nothing without a Buzz link", () => {
