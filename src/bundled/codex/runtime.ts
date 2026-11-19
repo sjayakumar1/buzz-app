@@ -172,6 +172,8 @@ type Request = {
   sessionContext?: string;
   /** The Solo chat's workspace Canvas section, if it has one. */
   project?: string;
+  /** `project` for a turn that works where `worksElsewhere` says. */
+  projectAt?: (elsewhere: boolean) => string | undefined;
   canvas?: Project;
   solo?: boolean;
   /** The model and effort the owner picked for this turn. */
@@ -239,6 +241,8 @@ type Active = {
   model?: string;
   effort?: string;
   workspace: string;
+  /** Whether it works elsewhere, which its Canvas states the rule from. */
+  elsewhere?: boolean;
   signal: AbortSignal;
   tools: AbortController;
   /** Every request this turn has taken in, the first and each steered one. */
@@ -2130,20 +2134,19 @@ export class CodexRuntime {
     const skills = referencedSkills(event, agent.owner, agent.pubkey);
     // The Canvas states the rule for its folders from whether the
     // conversation has one of its own, which a plugin can assign as its
-    // session is admitted.
-    const canvasProjectOf = () =>
-      canvasRead &&
-      project(
-        canvasRead.text,
+    // session is admitted. A turn renders it again for where it works.
+    const canvasProjectOf = (
+      elsewhere = worksElsewhere(
         // A Solo chat is one conversation, with no thread root.
-        worksElsewhere(
-          this.folder(reads.scope, agent.key, channelId),
-          agent.promptSections?.(channelId),
-        ),
-      );
-    const projectOf = () =>
+        this.folder(reads.scope, agent.key, channelId),
+        agent.promptSections?.(channelId),
+      ),
+    ) => canvasRead && project(canvasRead.text, elsewhere);
+    const projectOf = (elsewhere?: boolean) =>
       [
-        settings.scope === "community" ? undefined : canvasProjectOf()?.section,
+        settings.scope === "community"
+          ? undefined
+          : canvasProjectOf(elsewhere)?.section,
         folders.section,
         skills,
       ]
@@ -2274,6 +2277,10 @@ export class CodexRuntime {
       ...(canvasProject ? { canvas: canvasProject } : {}),
       ...(solo ? { solo: true } : {}),
       ...(projectText ? { project: `${projectText}\n` } : {}),
+      projectAt: (elsewhere: boolean) => {
+        const text = projectOf(elsewhere);
+        return text && `${text}\n`;
+      },
       answered,
       failActivity,
       ...(delivery.accepted ? { accepted: delivery.accepted } : {}),
@@ -2408,7 +2415,7 @@ export class CodexRuntime {
                 threadId: active.threadId,
                 expectedTurnId: active.turnId,
                 input: input(
-                  `${context}${project ? `${project}\n\n` : ""}${request.project ?? ""}${turnInput(request.agent.key, request.event, request.conversation, text, true, noteOf(request), wake, this.reads(request.agent.key)?.authorNames?.(request.event.pubkey))}`,
+                  `${context}${project ? `${project}\n\n` : ""}${(active.elsewhere === undefined ? request.project : request.projectAt?.(active.elsewhere)) ?? ""}${turnInput(request.agent.key, request.event, request.conversation, text, true, noteOf(request), wake, this.reads(request.agent.key)?.authorNames?.(request.event.pubkey))}`,
                 ),
               });
               request.steering = steered.then(
@@ -3706,6 +3713,8 @@ export class CodexRuntime {
         base,
         facts,
         sections,
+        // Where it works, which its Canvas states the rule from.
+        elsewhere: worksElsewhere(home && workspace, choices),
         updates: fresh
           ? ""
           : sectionUpdates(existing?.sections, facts, choices),
@@ -3863,6 +3872,7 @@ export class CodexRuntime {
       // A refusal outside this turn does not explain how it ends.
       explain = server.explainer?.(threadId);
       active.workspace = workspace;
+      active.elsewhere = loaded.elsewhere;
       active.model = model;
       active.effort = effort;
       // The seat owns its retained bridge; individual turns must not close it.
@@ -3934,6 +3944,13 @@ export class CodexRuntime {
         }
         signal.throwIfAborted();
         request.accepted?.();
+        // A folder assigned since it was admitted can differ from where
+        // its thread works, which its Canvas states the rule from.
+        if (active.elsewhere !== undefined && request.projectAt) {
+          const placed = request.projectAt(active.elsewhere);
+          if (placed) request.project = placed;
+          else delete request.project;
+        }
         if (settings.scope === "community")
           request.project =
             [
