@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { RelaySession } from "../relay/session";
 import type { ThreadSnapshot, ThreadView } from "../relay/threads";
 import type { ChannelMessage } from "../relay/contracts";
@@ -15,7 +15,20 @@ import type {
 } from "../conversation/contracts";
 import type { Contribution } from "../../plugins/contributions";
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+});
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 const id = (n: number) => n.toString(16).padStart(64, "a");
 const link = (n: number) => `buzz://message?channel=general&id=${id(n)}`;
@@ -211,6 +224,24 @@ it("shows a card's last read message at once when it remounts", () => {
   render(card);
   expect(cards()[0]?.textContent).toContain("Seen before");
   expect(screen.queryByText("Loading message…")).toBeNull();
+});
+
+it("collapses a long linked message behind a button that doesn't open the card", () => {
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(900);
+  const { session } = fakeSession({ [id(1)]: "A long message" });
+  const onOpenLink = vi.fn(() => true);
+  render(
+    <MessageLinkCards
+      urls={[link(1)]}
+      session={session}
+      scope="community"
+      onOpenLink={onOpenLink}
+      renderMessage={markdown(onOpenLink)}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Show full message" }));
+  expect(screen.getByRole("button", { name: "Show less" })).toBeTruthy();
+  expect(onOpenLink).not.toHaveBeenCalled();
 });
 
 it(`folds cards past ${FOLD_AFTER} behind one button`, () => {

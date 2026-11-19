@@ -17,6 +17,7 @@ import type { ChannelMessage } from "../relay/contracts";
 import { projectMarkdownAttachments } from "../relay/message-content";
 import type { RelaySession } from "../relay/session";
 import styles from "./LinkPreviews.module.css";
+import { MessageCard } from "./MessageCard";
 import { messageViewKey } from "./view-key";
 import { FOLD_AFTER } from "./LinkPreviews";
 /** Live readers all inline cards may hold at once, out of the session's 64,
@@ -71,8 +72,8 @@ function messageCache(session: RelaySession) {
   return cache;
 }
 
-/** Cards below a message for the Buzz messages it links to: the link's
- * hover card byline over the message as its conversation renders it. A card
+/** Cards below a message for the Buzz messages it links to, framed as a
+ * forward is, over the message as its conversation renders it. A card
  * opens its link as clicking the link does. Past `FOLD_AFTER`, the rest fold
  * behind one button, as web previews do. */
 export function MessageLinkCards({
@@ -203,11 +204,7 @@ function MessageLinkCard({
           new Set(message.attachments.map((item) => item.url)),
         ).content;
         if (!content.trim()) return null;
-        return (
-          <div className={styles.messageBody}>
-            {renderMessage({ ...message, content, attachmentSeams: [] })}
-          </div>
-        );
+        return renderMessage({ ...message, content, attachmentSeams: [] });
       },
       cached,
       remember,
@@ -233,10 +230,9 @@ function MessageLinkCard({
   );
   return (
     <>
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: The card's time link opens it from the keyboard; the surface click is a mouse shortcut. */}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: As above, the surface is a pointer target for the card's own link. */}
-      <div
-        className={styles.messageCard}
+      <MessageCard
+        opens
+        aria-label="Linked message"
         data-message-link-card=""
         onClick={(event) => {
           if (opensCard(event)) openCard();
@@ -258,9 +254,11 @@ function MessageLinkCard({
           <LinkedMessage message={cached} session={session} inline={inline} />
         ) : (
           // Waiting for a free reader, as a hover card waits for its read.
-          <span role="status">Loading message…</span>
+          <span role="status" className="text-body-sm text-subtle">
+            Loading message…
+          </span>
         )}
-      </div>
+      </MessageCard>
       {unavailable && (
         <span role="status">This Buzz link couldn’t be opened here.</span>
       )}

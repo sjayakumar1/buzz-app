@@ -17,7 +17,12 @@ import {
   LightningIcon,
   LockIcon,
 } from "../../shared/design-system/icons/index";
-import { channelIcon } from "../channels/channel-icon";
+import { channelIcon, channelText } from "../channels/channel-icon";
+import {
+  MessageCardBody,
+  MessageCardByline,
+  messageCardTime,
+} from "../messages/MessageCard";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { relativeTimestamp } from "../../shared/relative-timestamp";
 import styles from "./LinkPreview.module.css";
@@ -274,6 +279,60 @@ export function LinkedMessage({
     channel?.hidden || channel?.channelType === "dm"
       ? LockIcon
       : channelIcon(channel);
+  if (inline)
+    // As a forward shows its message, without the forward's label.
+    return (
+      <>
+        <MessageCardByline
+          avatar={
+            <Avatar
+              alt=""
+              fallback={name}
+              fallbackContent={
+                message.workflowOwnerId ? (
+                  <LightningIcon size={14} />
+                ) : undefined
+              }
+              size="small"
+              shape={
+                message.workflowOwnerId || profile?.isAgent
+                  ? "squircle"
+                  : "circle"
+              }
+              src={
+                message.workflowOwnerId
+                  ? null
+                  : avatarMedia(profile?.picture, session.media)
+              }
+            />
+          }
+          author={name}
+          agent={!message.workflowOwnerId && !!profile?.isAgent}
+          time={inline.link(
+            <time dateTime={date.toISOString()}>{messageCardTime(date)}</time>,
+          )}
+          source={
+            channel?.channelType === "dm" || !channel
+              ? channelName
+              : channelText(channel)
+          }
+          locked={
+            !!channel &&
+            (!!channel.hidden ||
+              !!channel.private ||
+              channel.channelType === "dm" ||
+              channel.channelType === "solo")
+          }
+        />
+        {body ? (
+          <MessageCardBody>{body}</MessageCardBody>
+        ) : (
+          <span className="text-body-sm text-subtle">
+            {message.attachments.length ? "Attachment" : "Empty message"}
+          </span>
+        )}
+      </>
+    );
   return (
     <>
       <span className={styles.byline}>
@@ -293,7 +352,7 @@ export function LinkedMessage({
         <span className={styles.metadata}>
           <span className={styles.author}>
             <strong>{name}</strong>
-            {inline ? inline.link(time) : time}
+            {time}
           </span>
           <span className={styles.channel}>
             {channel && <ChannelIcon aria-hidden="true" size={13} />}
@@ -301,12 +360,10 @@ export function LinkedMessage({
           </span>
         </span>
       </span>
-      {(inline && body) || (
-        <span className={styles.message}>
-          {(!inline && messagePreviewText(message.content)) ||
-            (message.attachments.length ? "Attachment" : "Empty message")}
-        </span>
-      )}
+      <span className={styles.message}>
+        {messagePreviewText(message.content) ||
+          (message.attachments.length ? "Attachment" : "Empty message")}
+      </span>
     </>
   );
 }

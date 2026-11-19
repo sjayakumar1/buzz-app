@@ -10,34 +10,6 @@
 .previews > * {
   max-width: 100%;
 }
-/* A linked message, laid out as its link's hover card is. */
-.messageCard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  box-sizing: border-box;
-  width: 40rem;
-  padding: var(--space-3);
-  border: 1px solid var(--border-standard);
-  border-radius: var(--radius-icon-button);
-  background: var(--surface-inset);
-  color: var(--text-standard);
-  text-decoration: none;
-  font-size: var(--text-body);
-  line-height: var(--text-body--line-height);
-  letter-spacing: var(--text-body--letter-spacing);
-  font-weight: var(--text-body--font-weight);
-  cursor: pointer;
-}
-.messageCard:hover {
-  color: var(--text-standard);
-  text-decoration: none;
-}
-@media (hover: hover) and (pointer: fine) {
-  .messageCard:hover {
-    background: var(--surface-hover);
-  }
-}
 /* The card's time, its keyboard way in; the surface opens it by pointer. */
 .messageLink {
   color: inherit;
@@ -50,15 +22,4 @@
 html[data-keyboard-navigation] .messageLink:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-}
-/* The message as its row renders it, cut off past a dozen lines; the card
- * opens the rest. Focus inside shows it all, so no focused link is hidden. */
-.messageBody {
-  min-width: 0;
-  max-height: calc(var(--text-body--line-height) * 12em);
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.messageBody:focus-within {
-  max-height: none;
 }
