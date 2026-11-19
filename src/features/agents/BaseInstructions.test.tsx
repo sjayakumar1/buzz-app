@@ -484,6 +484,45 @@ it("holds the form while a save is in flight", async () => {
   expect(choice("Progress")).toBeEnabled();
 });
 
+it("reopens on the saved choices while a save is in flight, and shows it failed", async () => {
+  const user = userEvent.setup();
+  const store = memory();
+  let fail = (_: Error) => {};
+  // Like the native store: it shows a value as soon as it is written, and
+  // puts the saved one back if the write fails.
+  const held: AgentStore = {
+    ...store,
+    set: vi.fn(async (key, value) => {
+      const before = store.get(key);
+      await store.set(key, value);
+      try {
+        await new Promise<void>((_, reject) => {
+          fail = reject;
+        });
+      } catch (reason) {
+        await store.set(key, before);
+        throw reason;
+      }
+    }),
+  };
+  const first = render(<BaseInstructions store={held} />);
+  await choose(user, "Progress", "Off");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  try {
+    await waitFor(() => expect(held.set).toHaveBeenCalledOnce());
+    first.unmount();
+    render(<BaseInstructions store={held} />);
+    expect(choice("Progress")).toHaveTextContent("Default");
+    expect(choice("Progress")).toHaveAttribute("aria-readonly", "true");
+  } finally {
+    fail(new Error("The disk is full"));
+  }
+  expect(await screen.findByText("The disk is full")).toBeInTheDocument();
+  expect(choice("Progress")).toHaveTextContent("Default");
+  expect(choice("Progress")).not.toHaveAttribute("aria-readonly", "true");
+  expect(ownerChoices(store)).toEqual({});
+});
+
 function ownerSectionsHash(id: string) {
   const section = SECTIONS.find((candidate) => candidate.id === id);
   if (!section) throw new Error(id);
