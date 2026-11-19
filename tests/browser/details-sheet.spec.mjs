@@ -835,3 +835,65 @@ test("a long GitHub panel over the composer scrolls under the wheel", async ({
     )
     .toBe(true);
 });
+
+test.describe("first inline thread", () => {
+  test.use({ threadIntro: true });
+
+  // Anchoring each step to the sheet's title and pop-out button needs real
+  // layout; jsdom reports every element at the origin.
+  test("walks through replying here, then the pop-out button and inline switch", async ({
+    page,
+    app,
+  }) => {
+    await open(page, app);
+    const row = page
+      .getByRole("region", { name: "Channel message history" })
+      .locator("[data-message-id]")
+      .first();
+    await hoverMessage(row);
+    await row.getByRole("button", { name: "Reply", exact: true }).click();
+    const sheet = page.getByRole("dialog", { name: "Thread", exact: true });
+    await expect(sheet).toBeVisible();
+    const first = page.getByRole("dialog", {
+      name: "Threads can now open without a tab",
+    });
+    await expect(first).toBeVisible();
+    const title = sheet.locator("header [data-shape='pill']");
+    await expect
+      .poll(async () => {
+        const [card, anchor] = await Promise.all([
+          first.boundingBox(),
+          title.boundingBox(),
+        ]);
+        return Math.abs(card.y - (anchor.y + anchor.height + 8)) <= 1;
+      })
+      .toBe(true);
+    await page.screenshot({ path: test.info().outputPath("intro-step-1.png") });
+
+    await first.getByRole("button", { name: "Next" }).click();
+    const second = page.getByRole("dialog", { name: "Open in a tab anytime" });
+    await expect(second).toBeVisible();
+    const popOut = sheet.getByRole("button", { name: "Open as tab" });
+    await expect
+      .poll(async () => {
+        const [card, anchor] = await Promise.all([
+          second.boundingBox(),
+          popOut.boundingBox(),
+        ]);
+        return card.y > anchor.y + anchor.height;
+      })
+      .toBe(true);
+    await page.screenshot({ path: test.info().outputPath("intro-step-2.png") });
+    await second.getByRole("button", { name: "Got it" }).click();
+    await expect(second).toBeHidden();
+    await expect(sheet).toBeVisible();
+    // Afterwards the button names itself on hover, as before.
+    await popOut.hover();
+    await expect(
+      page.getByRole("tooltip", { name: "Open as tab" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("intro-done-hover.png"),
+    });
+  });
+});

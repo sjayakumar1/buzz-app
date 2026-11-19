@@ -1,6 +1,9 @@
 import { createPortal } from "react-dom";
 import { DetailTabContext, DetailTabSlot } from "./DetailTabContext";
-import { IntroSpotlight } from "./InlineThreadIntro";
+import {
+  type InlineThreadIntroStep,
+  IntroSpotlight,
+} from "./InlineThreadIntro";
 import { DialogBarMaterial } from "../../shared/design-system/ui/DialogBarMaterial";
 import { spring } from "motion";
 import {
@@ -313,7 +316,8 @@ export function DetailsSheet({
   headerActions,
   onClosed,
   onPromoted,
-  promoteSpotlight = false,
+  spotlight,
+  onSpotlightAnchor,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
@@ -334,8 +338,10 @@ export function DetailsSheet({
   headerActions?: ReactNode;
   onClosed?: () => void;
   onPromoted?: (() => void) | undefined;
-  /** Ring Open as tab while an intro points at it. */
-  promoteSpotlight?: boolean;
+  /** The intro step pointing into this sheet: 1 its title, 2 Open as tab. */
+  spotlight?: InlineThreadIntroStep | undefined;
+  /** Receives the element the current intro step points at. */
+  onSpotlightAnchor?: ((element: HTMLElement | null) => void) | undefined;
 }) {
   const { composer } = host;
   const promote = useContext(DetailTabContext);
@@ -498,8 +504,21 @@ export function DetailsSheet({
                 )}
                 <div className={styles.byline}>
                   {leading}
-                  <BaseDialog.Title className={`text-label ${styles.name}`}>
-                    {title}
+                  <BaseDialog.Title
+                    className={`text-label ${styles.name}`}
+                    data-spotlight={spotlight === 1 || undefined}
+                  >
+                    {spotlight === undefined ? (
+                      title
+                    ) : (
+                      <IntroSpotlight
+                        shape="pill"
+                        active={spotlight === 1}
+                        anchorRef={onSpotlightAnchor}
+                      >
+                        {title}
+                      </IntroSpotlight>
+                    )}
                   </BaseDialog.Title>
                   {description && (
                     <BaseDialog.Description
@@ -512,10 +531,17 @@ export function DetailsSheet({
                 <div className="buzz-dialog-header-actions">
                   {headerActions}
                   {promote && (
-                    <IntroSpotlight active={promoteSpotlight}>
+                    <IntroSpotlight
+                      shape="ring"
+                      active={spotlight === 2}
+                      anchorRef={onSpotlightAnchor}
+                    >
                       <IconButton
                         aria-label="Open as tab"
-                        title="Open as tab"
+                        // An intro step names it while it points here.
+                        title={
+                          spotlight === undefined ? "Open as tab" : undefined
+                        }
                         variant="glass"
                         shape="round"
                         size="compact"

@@ -6,6 +6,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { registerOverlayComposer } from "../../features/messages/composer-overlay";
@@ -13,7 +14,6 @@ import {
   setThreadPlacementPreference,
   threadPlacementPreference,
 } from "../../features/messages/thread-preferences";
-import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import { ChannelBody } from "./ChannelBody";
 
 const fixture = vi.hoisted(() => {
@@ -151,18 +151,16 @@ it("reads at the bottom even when a separate thread tab exists", () => {
   expect(screen.getByRole("textbox", { name: "Thread draft" })).toBeVisible();
 });
 
-it("introduces the first inline thread once, with its tab button and an inline off switch", async () => {
+it("introduces the first inline thread once in two steps: replying here, then its tab button and inline switch", async () => {
   fixture.update("ready", [{ id: "root" }]);
   const view = render(
-    <ToastProvider>
-      <div data-composer-host="">
-        <ChannelBody cached={false} onOpenThread={() => {}} />
-        <form
-          data-message-composer
-          ref={(node) => (node ? registerOverlayComposer(node) : undefined)}
-        />
-      </div>
-    </ToastProvider>,
+    <div data-composer-host="">
+      <ChannelBody cached={false} onOpenThread={() => {}} />
+      <form
+        data-message-composer
+        ref={(node) => (node ? registerOverlayComposer(node) : undefined)}
+      />
+    </div>,
   );
   const open = () => {
     const trigger = screen.getByRole("button", { name: "Open reply" });
@@ -170,27 +168,60 @@ it("introduces the first inline thread once, with its tab button and an inline o
     fireEvent.click(trigger);
   };
   open();
+  const editor = screen.getByRole("textbox", { name: "Thread draft" });
+  // Step 1 points at the thread's title and leaves its composer focused.
+  const first = await screen.findByRole("dialog", {
+    name: "Threads can now open without a tab",
+  });
+  expect(first).toHaveTextContent("1 of 2");
+  expect(screen.getByText("Thread").closest("[data-shape]")).toHaveAttribute(
+    "data-active",
+  );
+  // The step never takes focus from the thread's composer.
+  editor.focus();
+  await act(async () => {});
+  expect(editor).toHaveFocus();
+  // Reading the thread does not dismiss it.
+  fireEvent.pointerDown(editor);
   expect(
-    await screen.findByText("Threads now open right here"),
+    screen.getByRole("dialog", { name: "Threads can now open without a tab" }),
   ).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  const second = await screen.findByRole("dialog", {
+    name: "Open in a tab anytime",
+  });
+  expect(second).toHaveTextContent("2 of 2");
   const popOut = screen.getByRole("button", { name: "Open thread in tab" });
   expect(popOut.parentElement).toHaveAttribute("data-active");
 
-  // Turning inline off applies to later threads; the tip stays to undo it.
+  // Turning inline off applies to later threads; the step stays to undo it.
   fireEvent.click(screen.getByRole("switch", { name: "Open threads inline" }));
   expect(threadPlacementPreference()).toBe("side");
   fireEvent.click(screen.getByRole("switch", { name: "Open threads inline" }));
   expect(threadPlacementPreference()).toBe("inline");
 
   fireEvent.click(screen.getByRole("button", { name: "Got it" }));
-  await act(async () => {});
-  expect(screen.queryByText("Threads now open right here")).toBeNull();
-  expect(popOut.parentElement).not.toHaveAttribute("data-active");
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", { name: "Open in a tab anytime" }),
+    ).toBeNull(),
+  );
+  // Once done, the button names itself on hover again.
+  expect(
+    screen
+      .getByRole("button", { name: "Open thread in tab" })
+      .closest("[data-shape]"),
+  ).not.toHaveAttribute("data-active");
 
   fireEvent.click(screen.getByRole("button", { name: "Close thread" }));
   open();
   expect(screen.getByRole("dialog", { name: "Thread" })).toBeVisible();
   await act(async () => {});
-  expect(screen.queryByText("Threads now open right here")).toBeNull();
+  expect(
+    screen.queryByRole("dialog", {
+      name: "Threads can now open without a tab",
+    }),
+  ).toBeNull();
   view.unmount();
 });

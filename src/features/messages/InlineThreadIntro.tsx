@@ -1,8 +1,13 @@
 import type { ReactNode } from "react";
-import { ArrowSquareOutIcon } from "../../shared/design-system/icons";
+import { ArrowRightIcon } from "../../shared/design-system/icons";
 import { Button } from "../../shared/design-system/ui/Button";
+import {
+  PopoverDescription,
+  PopoverPopup,
+  PopoverRoot,
+  PopoverTitle,
+} from "../../shared/design-system/ui/Popover";
 import { Switch } from "../../shared/design-system/ui/Switch";
-import { ToastNotice } from "../../shared/design-system/ui/Toast";
 import styles from "./InlineThreadIntro.module.css";
 import {
   setThreadPlacementPreference,
@@ -29,62 +34,124 @@ export function markInlineThreadIntroSeen(): void {
   }
 }
 
-/** The first inline thread explains itself: reply from its composer, pop it
- * out to a tab, or turn inline threads off. Lives with its thread sheet. */
-export function InlineThreadIntro({ onDone }: { onDone(): void }) {
+/** Step 1 points at the thread's title; step 2 at its pop-out button. */
+export type InlineThreadIntroStep = 1 | 2;
+
+/** The first inline thread explains itself in two anchored steps: where to
+ * read and reply, then how to move it into a tab or turn inline threads off.
+ * It lives with its thread sheet and never takes focus from its composer. */
+export function InlineThreadIntro({
+  step,
+  anchor,
+  onNext,
+  onDone,
+}: {
+  step: InlineThreadIntroStep;
+  anchor: HTMLElement | null;
+  onNext(): void;
+  onDone(): void;
+}) {
   const { placement } = useThreadPlacementPreference();
   const done = () => {
     markInlineThreadIntroSeen();
     onDone();
   };
   return (
-    <ToastNotice
-      title="Threads now open right here"
-      description="Read the thread and reply from its composer without leaving the conversation."
-      details={
-        <p className={`text-body-sm ${styles.details}`}>
-          Select{" "}
-          <ArrowSquareOutIcon
-            size={14}
-            aria-label="Open in tab"
-            className={styles.icon}
-          />{" "}
-          to turn it into a tab any time. Prefer tabs? Turn this off here or
-          later in Appearance settings.
-        </p>
-      }
-      tone="info"
-      closeLabel="Dismiss thread tip"
-      onDismiss={done}
+    <PopoverRoot
+      open={!!anchor}
+      modal={false}
+      onOpenChange={(open, details) => {
+        if (open) return;
+        // Reading or replying in the thread keeps the tip; Escape finishes it.
+        if (
+          details.reason === "outside-press" ||
+          details.reason === "focus-out"
+        ) {
+          details.cancel();
+          return;
+        }
+        done();
+      }}
     >
-      <div className={styles.actions}>
-        <Switch
-          label="Open threads inline"
-          checked={placement === "inline"}
-          onCheckedChange={(inline) => {
-            // Off restores the earlier default; open sheets stay where they are.
-            setThreadPlacementPreference(inline ? "inline" : "side");
-            markInlineThreadIntroSeen();
-          }}
-        />
-        <Button type="button" size="sm" variant="prominent" onClick={done}>
-          Got it
-        </Button>
-      </div>
-    </ToastNotice>
+      <PopoverPopup
+        key={step}
+        anchor={anchor}
+        side="bottom"
+        align={step === 1 ? "start" : "end"}
+        initialFocus={false}
+        finalFocus={false}
+        data-inline-thread-intro={step}
+      >
+        <div className={styles.card}>
+          <p className={`text-label-sm ${styles.step}`}>{step} of 2</p>
+          {step === 1 ? (
+            <>
+              <PopoverTitle>Threads can now open without a tab</PopoverTitle>
+              <PopoverDescription>
+                Read the replies here, then write yours in the composer below.
+              </PopoverDescription>
+              <div className={styles.next}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="prominent"
+                  onClick={onNext}
+                >
+                  Next
+                  <ArrowRightIcon size={16} aria-hidden="true" />
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <PopoverTitle>Open in a tab anytime</PopoverTitle>
+              <PopoverDescription>
+                Use this button to move the thread into its own tab. You can
+                make opening in a tab the default anytime in Settings, or switch
+                it back with the toggle below.
+              </PopoverDescription>
+              <div className={styles.actions}>
+                <Switch
+                  label="Open threads inline"
+                  checked={placement === "inline"}
+                  onCheckedChange={(inline) => {
+                    // Off restores the earlier default; this sheet stays open.
+                    setThreadPlacementPreference(inline ? "inline" : "side");
+                    markInlineThreadIntroSeen();
+                  }}
+                />
+                <Button type="button" size="sm" onClick={done}>
+                  Got it
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </PopoverPopup>
+    </PopoverRoot>
   );
 }
 
-/** Rings the control the intro points at while the intro is showing. */
+/** Marks the control an intro step points at, and gives the step its anchor. */
 export function IntroSpotlight({
   active,
+  shape,
+  anchorRef,
   children,
 }: {
   active: boolean;
+  /** A pill behind a title, or a ring around a round button. */
+  shape: "pill" | "ring";
+  anchorRef?: ((element: HTMLElement | null) => void) | undefined;
   children: ReactNode;
 }) {
   return (
-    <span className={styles.spotlight} data-active={active || undefined}>
+    <span
+      ref={active ? anchorRef : undefined}
+      className={styles.spotlight}
+      data-shape={shape}
+      data-active={active || undefined}
+    >
       {children}
     </span>
   );
